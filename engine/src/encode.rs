@@ -185,23 +185,68 @@ async fn encode(
         media: &media,
         level,
         gpu_level,
-        time_base,
+        time_base: time_base.clone(),
         output_fps,
         filter: video_filter.as_deref(),
         filter_threads: resize_threads(&media, job.frame_size, job.settings.threads),
         started,
+        rife: None,
     };
     let target = ExportTarget {
         path: temp_path,
         directory: work.path(),
         frame_size,
     };
+    // Motion Blur uses GPU interpolation (RIFE) when its runtime is installed and
+    // falls back to the built-in blend if it is missing or fails.
+    let rife = (job.settings.render_mode == RenderMode::MotionBlur && job.frame_size.is_none())
+        .then(crate::rife::Rife::locate)
+        .flatten();
+    let rife_script = match &rife {
+        Some(rife) => {
+            let full_range = media.color_range.as_deref() == Some("pc");
+            Some(rife.script(&media.path, media.fps, full_range, &job.settings, work.path())?)
+        }
+        None => None,
+    };
+    let rife_filter = rife_script.as_ref().map(|_| {
+        let bright = job.settings.shadow_lift;
+        let colour = if !srgb_source {
+            String::new()
+        } else if bright {
+            format!("{},", crate::look::premiere_look_filter())
+        } else {
+            "colorspace=ispace=bt709:iprimaries=bt709:itrc=iec61966-2-1:space=bt709:primaries=bt709:trc=bt709:format=yuv420p,".to_owned()
+        };
+        format!("{colour}format=yuv420p")
+    });
+    let mut exported = None;
+    if let (Some(rife), Some(script), Some(filter)) = (&rife, &rife_script, &rife_filter) {
+        let rife_encoder = Encoder {
+            filter: Some(filter),
+            rife: Some((rife.vspipe.as_path(), script.as_path())),
+            time_base: time_base.clone(),
+            ..encoder
+        };
+        log.line("Motion Blur: RIFE GPU interpolation".into());
+        match rife_encoder.export(&target, cancel, log, None).await {
+            Ok(result) => exported = Some(result),
+            Err(error) if error.code == "cancelled" => return Err(error),
+            Err(error) => log.line(format!(
+                "RIFE was unavailable ({} {}); using the built-in blend.",
+                error.message, error.detail
+            )),
+        }
+    }
     let Encoded {
         media: mut output,
         frames,
         encoder: video_encoder,
         decoder,
-    } = encoder.export(&target, cancel, log, checkpoint).await?;
+    } = match exported {
+        Some(result) => result,
+        None => encoder.export(&target, cancel, log, checkpoint).await?,
+    };
     let gpu = video_encoder != "libx264";
     check_cancel(cancel)?;
     (log.report)(Event::Finalizing);
@@ -500,6 +545,8 @@ struct Encoder<'a> {
     filter: Option<&'a str>,
     filter_threads: u8,
     started: Instant,
+    /// VSPipe and script when RIFE motion blur feeds the encoder through a pipe.
+    rife: Option<(&'a Path, &'a Path)>,
 }
 
 #[derive(Clone, Copy)]
@@ -911,7 +958,33 @@ impl Encoder<'_> {
             decoder.unwrap_or("CPU")
         ));
         log.line(format!("{command:?}"));
-        run_pass(&mut command, &mut progress, log, cancel).await?;
+        let mut vspipe = None;
+        if let Some((vspipe_path, script)) = self.rife {
+            let mut pipe = std::process::Command::new(vspipe_path);
+            pipe.args(["-c", "y4m"])
+                .arg(script)
+                .arg("-")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null());
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                pipe.creation_flags(0x08000000);
+            }
+            let mut child = pipe
+                .spawn()
+                .map_err(|e| Error::io(e, "missingTool", "Could not start RIFE interpolation."))?;
+            let stdout = child.stdout.take().expect("piped");
+            command.stdin(std::process::Stdio::from(stdout));
+            vspipe = Some(child);
+        }
+        let result = run_pass(&mut command, &mut progress, log, cancel).await;
+        if let Some(mut child) = vspipe {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        result?;
         if progress.frame == 0 {
             return Err(Error::new(
                 "encoder",
@@ -931,7 +1004,6 @@ impl Encoder<'_> {
             "-hide_banner",
             "-loglevel",
             "info",
-            "-nostdin",
             "-y",
             "-xerror",
             "-filter_threads",
@@ -941,13 +1013,30 @@ impl Encoder<'_> {
             "0.25",
             "-progress",
             "pipe:1",
-            "-protocol_whitelist",
-            "file",
-            "-format_whitelist",
-            LOCAL_FORMATS,
-            "-noautorotate",
         ]);
-        if let Some(decoder) = decoder {
+        if self.rife.is_some() {
+            command.args([
+                "-protocol_whitelist",
+                "file,pipe",
+                "-format_whitelist",
+                &format!("{LOCAL_FORMATS},yuv4mpegpipe"),
+                "-f",
+                "yuv4mpegpipe",
+                "-i",
+                "pipe:0",
+                "-noautorotate",
+                "-i",
+            ])
+            .arg(&media.path)
+            .args(["-map", "0:v:0"]);
+            if let Some(filter) = self.filter {
+                command.args(["-vf", filter]);
+            }
+        } else {
+            command.args(["-nostdin", "-protocol_whitelist", "file", "-format_whitelist", LOCAL_FORMATS, "-noautorotate"]);
+        }
+        if self.rife.is_some() {
+        } else if let Some(decoder) = decoder {
             let surface = if decoder == "cuda" { "cuda" } else { "d3d11" };
             command.args([
                 format!("-hwaccel:{}", media.video_index),
@@ -956,12 +1045,14 @@ impl Encoder<'_> {
                 surface.to_owned(),
             ]);
         }
+        let mut cuda_frames = false;
+        if self.rife.is_none() {
         command
             .arg("-i")
             .arg(&media.path)
             .args(["-map", &format!("0:{}", media.video_index)]);
         let hardware_format = decoder.and_then(|_| download_format(media));
-        let cuda_frames = decoder == Some("cuda")
+        cuda_frames = decoder == Some("cuda")
             && matches!(pass, Pass::GpuOutput(GpuEncoder::Nvenc))
             && self.filter.is_none()
             && hardware_format == Some("nv12");
@@ -975,9 +1066,11 @@ impl Encoder<'_> {
         } else if let Some(filter) = self.filter {
             command.args(["-vf", filter]);
         }
+        }
         if !matches!(pass, Pass::Analysis) {
             if let Some(index) = media.audio_index {
-                command.args(["-map", &format!("0:{index}")]);
+                let audio_input = if self.rife.is_some() { 1 } else { 0 };
+                command.args(["-map", &format!("{audio_input}:{index}")]);
                 if media.audio_codec.as_deref() == Some("aac")
                     && media.audio_profile.as_deref() == Some("LC")
                     && media.sample_rate == Some(48_000)

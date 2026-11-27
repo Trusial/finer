@@ -2,6 +2,7 @@ mod acceleration;
 mod checkpoint;
 mod encode;
 mod look;
+mod rife;
 mod media;
 mod mp4;
 mod output;

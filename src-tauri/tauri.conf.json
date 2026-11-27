@@ -34,6 +34,7 @@
     "targets": [
       "nsis"
     ],
+    "resources": { "rife/": "rife/" },
     "externalBin": [
       "bin/ffmpeg",
       "bin/ffprobe"

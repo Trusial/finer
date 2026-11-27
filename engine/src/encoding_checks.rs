@@ -68,6 +68,7 @@ async fn unavailable_gpu_retries_with_cpu() {
         filter: None,
         filter_threads: 1,
         started: Instant::now(),
+        rife: None,
     };
     let target = ExportTarget {
         path: &directory.path().join("output.mp4"),
@@ -188,6 +189,7 @@ async fn benchmark_acceleration() {
             filter: filter.as_deref(),
             filter_threads: 1,
             started: Instant::now(),
+            rife: None,
         };
         let mut cases = vec![("CPU", None, None, 1)];
         if resize.is_some() {

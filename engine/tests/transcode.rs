@@ -916,3 +916,34 @@ async fn reports_why_audio_patch_was_skipped() {
         assert_eq!(output.audio_patch, expected);
     }
 }
+
+#[tokio::test]
+#[ignore = "requires FINER_RIFE_DIR (RIFE runtime) and FINER_TEST_RIFE_SOURCE (a high-fps clip)"]
+async fn rife_motion_blur_renders_through_pipe() {
+    let (Some(_), Some(source)) = (
+        std::env::var_os("FINER_RIFE_DIR"),
+        std::env::var_os("FINER_TEST_RIFE_SOURCE"),
+    ) else {
+        return;
+    };
+    let folder = tempfile::tempdir().unwrap();
+    let tools = tools();
+    let mut job = job(Path::new(&source), folder.path(), &tools);
+    job.settings.render_mode = finer_engine::RenderMode::MotionBlur;
+    job.settings.blur_samples = 5;
+    job.settings.gpu_encoding = true;
+    let logs = Mutex::new(Vec::new());
+    let output = convert(job, CancellationToken::new(), |event| {
+        if let Event::Log { line } = event {
+            logs.lock().unwrap().push(line);
+        }
+    })
+    .await
+    .unwrap();
+    let logs = logs.into_inner().unwrap().join("\n");
+    assert!(logs.contains("Motion Blur: RIFE GPU interpolation"), "{logs}");
+    assert!(!logs.contains("using the built-in blend"), "{logs}");
+    let data = probe(&tools.ffprobe, &output.path, false);
+    assert_eq!(data["streams"][0]["avg_frame_rate"], "60/1");
+    assert!(data["streams"].as_array().unwrap().len() >= 2, "audio kept");
+}

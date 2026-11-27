@@ -5,3 +5,4 @@ src-tauri/gen/
 release/
 media-tools/
 src-tauri/bin/
+src-tauri/rife/
