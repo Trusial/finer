@@ -348,14 +348,14 @@ fn render_filter(
     srgb_source: bool,
 ) -> Option<String> {
     let mut filters = Vec::new();
-    // Bright Mode reproduces Premiere: OBS's sRGB-tagged values are taken as
-    // Rec.709 unchanged (only the tags are rewritten), which keeps shadows such
-    // as obsidian bright. Without it, the sRGB curve is converted exactly.
+    // Bright Mode reproduces Premiere: OBS sRGB footage gets the shadow lift
+    // measured from a real Premiere export (see look.rs), so obsidian and other
+    // dark blocks look as bright as there. Without it, sRGB is converted exactly.
     // Finer (Quality) always keeps the OBS look; Blender follows the Bright Mode switch.
     let bright = settings.render_mode == RenderMode::Quality || settings.shadow_lift;
     if srgb_source {
         filters.push(if bright {
-            "setparams=color_trc=bt709:color_primaries=bt709:colorspace=bt709".to_owned()
+            crate::look::premiere_look_filter()
         } else {
             "colorspace=ispace=bt709:iprimaries=bt709:itrc=iec61966-2-1:space=bt709:primaries=bt709:trc=bt709:format=yuv420p".to_owned()
         });
@@ -1087,7 +1087,7 @@ mod render_filter_tests {
         };
         assert_eq!(
             render_filter(&settings, None, 60.0, true).as_deref(),
-            Some("setparams=color_trc=bt709:color_primaries=bt709:colorspace=bt709,fps=fps=60:round=near")
+            Some(format!("{},fps=fps=60:round=near", crate::look::premiere_look_filter()).as_str())
         );
         assert_eq!(
             render_filter(&settings, None, 60.0, false).as_deref(),
@@ -1097,7 +1097,7 @@ mod render_filter_tests {
         assert_eq!(render_filter(&quality, None, 60.0, false), None);
         assert_eq!(
             render_filter(&Settings::default(), None, 60.0, true).as_deref(),
-            Some("setparams=color_trc=bt709:color_primaries=bt709:colorspace=bt709")
+            Some(crate::look::premiere_look_filter().as_str())
         );
     }
 }
