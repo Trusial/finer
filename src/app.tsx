@@ -14,6 +14,7 @@ import {
   Plus,
   RotateCcw,
   Settings2,
+  Columns2,
   Square,
   SquaresSubtract,
   Terminal,
@@ -31,12 +32,15 @@ import { QueueRow } from "./queue-row";
 import { ResolutionDialog } from "./resolution-dialog";
 import { SettingsDialog } from "./settings-dialog";
 import { Button, Hint } from "./ui";
+import { CompareDialog, DoneCard, ExportProgress, RowMenu, type RowAction } from "./studio-panels";
 import finerIcon from "./finer-icon.png";
 
 export function App() {
   const { toasts, notify, dismiss } = useNotifications();
   const [logId, setLogId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [compareId, setCompareId] = useState<string | null>(null);
+  const [dismissedDoneId, setDismissedDoneId] = useState<string | null>(null);
   const queue = useQueue(notify, setLogId);
   const [settings, setSettings] = useState(defaults);
   const [settingsOpen, setSettingsOpen] = useState<"general" | "output" | null>(null);
@@ -220,20 +224,21 @@ export function App() {
   function renderQueueRow(item: Job) {
     const hasLogs = item.status === "encoding" || queue.logs.current.has(item.id);
     const output = item.output;
+    const actions: RowAction[] = [];
+    if (output) {
+      actions.push({ label: "Compare before / after", icon: <Columns2 />, onSelect: () => setCompareId(item.id) });
+      actions.push({ label: "Show in Explorer", icon: <FolderOpen />, onSelect: () => windowAction(desktop.openResult(output.path, true)) });
+      actions.push({ label: "Export details", icon: <Info />, onSelect: () => setDetailsId(item.id) });
+    }
+    if (item.issue && ["outputDirectory", "permissionDenied", "diskFull"].includes(item.issue.code)) {
+      actions.push({ label: "Output settings", icon: <Settings2 />, disabled: queue.running, onSelect: () => setSettingsOpen("output") });
+    }
+    if (hasLogs) actions.push({ label: "Logs", icon: <Terminal />, onSelect: () => setLogId(item.id) });
+    if (item.status !== "encoding") {
+      actions.push({ label: isFinished(item) ? "Remove from finished" : "Remove from queue", icon: <X />, danger: true, onSelect: () => queue.remove(item.id) });
+    }
     return (
       <QueueRow key={item.id} item={item}>
-        {item.issue && ["outputDirectory", "permissionDenied", "diskFull"].includes(item.issue.code) && (
-          <Hint label="Output settings">
-            <Button
-              variant="icon"
-              aria-label="Output settings"
-              disabled={queue.running}
-              onClick={() => setSettingsOpen("output")}
-            >
-              <Settings2 />
-            </Button>
-          </Hint>
-        )}
         {(item.status === "failed" || item.status === "cancelled") && (
           <Hint label={item.status === "failed" ? "Retry" : "Queue again"}>
             <Button
@@ -250,70 +255,22 @@ export function App() {
           </Hint>
         )}
         {output && (
-          <>
-            <Hint label="Play video">
-              <Button
-                variant="icon"
-                aria-label="Play video"
-                onClick={() => windowAction(desktop.openResult(output.path, false))}
-              >
-                <Play />
-              </Button>
-            </Hint>
-            <Hint label="Show in Explorer">
-              <Button
-                variant="icon"
-                aria-label="Show in Explorer"
-                onClick={() => windowAction(desktop.openResult(output.path, true))}
-              >
-                <FolderOpen />
-              </Button>
-            </Hint>
-          </>
-        )}
-        {output && (
-          <Hint label="Export details">
-            <Button
-              variant="icon"
-              aria-label="Export details"
-              onClick={(event) => {
-                detailsTrigger.current = event.currentTarget;
-                setDetailsId(item.id);
-              }}
-            >
-              <Info />
+          <Hint label="Play video">
+            <Button variant="icon" aria-label="Play video" onClick={() => windowAction(desktop.openResult(output.path, false))}>
+              <Play />
             </Button>
           </Hint>
         )}
-        {hasLogs && (
-          <Hint label="Logs">
-            <Button
-              variant="icon"
-              aria-label={`Logs for ${fileLabel(item.path)}`}
-              onClick={(event) => {
-                logTrigger.current = event.currentTarget;
-                setLogId(item.id);
-              }}
-            >
-              <Terminal />
-            </Button>
-          </Hint>
-        )}
-        {item.status !== "encoding" && (
-          <Hint label={isFinished(item) ? "Remove from finished" : "Remove from queue"}>
-            <Button
-              variant="icon"
-              className="remove-job"
-              aria-label={`Remove ${fileLabel(item.path)}`}
-              onClick={() => queue.remove(item.id)}
-            >
-              <X />
-            </Button>
-          </Hint>
-        )}
+        <RowMenu label={`More actions for ${fileLabel(item.path)}`} actions={actions} />
       </QueueRow>
     );
   }
+
+  const latestDone = !queue.running
+    ? [...queue.jobs].reverse().find((job) => job.status === "complete" && job.output)
+    : undefined;
+  const doneJob = latestDone && latestDone.id !== dismissedDoneId ? latestDone : undefined;
+  const compareJob = queue.jobs.find((job) => job.id === compareId && !!job.output);
 
   return (
     <Tooltip.Provider delayDuration={480} skipDelayDuration={100}>
@@ -417,6 +374,17 @@ export function App() {
               </>
             ) : (
               <>
+                {activeJob && <ExportProgress job={activeJob} timeLeft={queue.queueTimeLeft} />}
+                {doneJob && (
+                  <DoneCard
+                    key={doneJob.id}
+                    job={doneJob}
+                    onPlay={() => windowAction(desktop.openResult(doneJob.output!.path, false))}
+                    onReveal={() => windowAction(desktop.openResult(doneJob.output!.path, true))}
+                    onCompare={() => setCompareId(doneJob.id)}
+                    onDismiss={() => setDismissedDoneId(doneJob.id)}
+                  />
+                )}
                 <section aria-labelledby="queued-title" className="queue-section">
                   <div className="queue-heading">
                     <h1 id="queued-title">
@@ -484,18 +452,18 @@ export function App() {
                     </button>
                   </div>
                 </section>
-                <section className="inspector-section inspector-fields">
+                <section className={`inspector-section inspector-fields ${settings.renderMode === "motionBlur" ? "has-two" : ""}`}>
                   <label>
-                    <span>Target frame rate</span>
+                    <span>Frame rate</span>
                     <select value={settings.targetFps} onChange={(event) => void updateRenderSettings({ targetFps: Number(event.target.value) })}>
                       {[24, 30, 50, 60, 90, 120].map((fps) => <option key={fps} value={fps}>{fps} FPS</option>)}
                     </select>
                   </label>
                   {settings.renderMode === "motionBlur" && (
                     <label>
-                      <span>Temporal samples</span>
+                      <span>Samples</span>
                       <select value={settings.blurSamples} onChange={(event) => void updateRenderSettings({ blurSamples: Number(event.target.value) })}>
-                        {[3, 5, 7, 9, 11, 13, 15].map((samples) => <option key={samples} value={samples}>{samples} samples</option>)}
+                        {[3, 5, 7, 9, 11, 13, 15].map((samples) => <option key={samples} value={samples}>{samples}</option>)}
                       </select>
                     </label>
                   )}
@@ -515,9 +483,9 @@ export function App() {
                 <strong>{blenderActive ? "CRF 8 master" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} Mbps`}</strong>
               </div>
               <div><span>Acceleration</span><strong>{blenderActive ? "CPU HQ" : settings.gpuEncoding ? "GPU" : "CPU"}</strong></div>
-              <div><span>Bright Mode</span><strong>{settings.shadowLift ? "On" : "Off"}</strong></div>
+              {blenderActive && <div><span>Bright Mode</span><strong>{settings.shadowLift ? "On" : "Off"}</strong></div>}
             </section>
-            <section className="inspector-section color-control">
+            {blenderActive && (<section className="inspector-section color-control swap-in">
               <div>
                 <strong>Bright Mode</strong>
                 <small>Brighter obsidian and dark blocks</small>
@@ -530,7 +498,7 @@ export function App() {
               >
                 <Switch.Thumb />
               </Switch.Root>
-            </section>
+            </section>)}
           </aside>
         </div>
 
@@ -595,6 +563,7 @@ export function App() {
             }}
           />
         )}
+        {compareJob && <CompareDialog key={compareJob.id} job={compareJob} onClose={() => setCompareId(null)} />}
         {logJob && (
           <LogDialog
             key={logJob.id}

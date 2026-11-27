@@ -131,7 +131,7 @@ async fn encode(
     } else {
         format!("1:{}", job.settings.target_fps)
     };
-    let shadow_lifted = job.settings.shadow_lift;
+    let shadow_lifted = job.settings.shadow_lift && job.settings.render_mode != RenderMode::Quality;
     // OBS and similar recorders tag Rec.709 primaries with the sRGB transfer curve.
     // Premiere converts that to a true Rec.709 curve on export; match it so the
     // result looks the same in players and on TikTok.
@@ -390,7 +390,7 @@ fn render_filter(
             ));
         }
     }
-    if settings.shadow_lift {
+    if settings.shadow_lift && settings.render_mode != RenderMode::Quality {
         // Lift dark and mid-tone luminance while protecting highlights. This is
         // intentionally a creative Minecraft look, not automatic color management.
         filters.push("eq=gamma=1.18:gamma_weight=0.82".to_owned());
@@ -980,12 +980,15 @@ mod render_filter_tests {
     #[test]
     fn shadow_lift_brightens_dark_tones_without_color_conversion() {
         let settings = Settings {
+            render_mode: RenderMode::FrameBlend,
             shadow_lift: true,
             ..Settings::default()
         };
         assert_eq!(
             render_filter(&settings, None, 60.0, false).as_deref(),
-            Some("eq=gamma=1.18:gamma_weight=0.82")
+            Some("fps=fps=60:round=near,eq=gamma=1.18:gamma_weight=0.82")
         );
+        let quality = Settings { shadow_lift: true, ..Settings::default() };
+        assert_eq!(render_filter(&quality, None, 60.0, false), None);
     }
 }

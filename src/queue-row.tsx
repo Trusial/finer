@@ -1,8 +1,9 @@
-import { Check, CircleAlert, CircleSlash, FileVideo, LoaderCircle } from "lucide-react";
+import { Check, CircleAlert, CircleSlash, LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { fileLabel, fpsLabel, frameSizeLabel, sizeLabel, timeLabel } from "./format";
 import type { Job } from "./queue";
 import { Hint } from "./ui";
+import { Thumb } from "./studio-panels";
 
 export function QueueRow({ item, children }: { item: Job; children: ReactNode }) {
   const encoding = item.status === "encoding";
@@ -30,9 +31,7 @@ export function QueueRow({ item, children }: { item: Job; children: ReactNode })
     <li className="queue-row">
       <div className="queue-item">
         <div className="file-summary">
-          <span className="file-icon">
-            <FileVideo />
-          </span>
+          <Thumb path={item.output?.path ?? item.path} className="file-thumb" />
           <div className="file-copy">
             <div className="file-title">
               <strong className="truncate" title={item.output?.path ?? item.path}>
