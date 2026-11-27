@@ -377,20 +377,35 @@ fn render_filter(
             }
         }
         RenderMode::MotionBlur => {
-            // f0e/blur recommends interpolating to about 5x the working frame rate,
-            // then blending an odd, symmetric temporal window. A binomial kernel
-            // approximates a Gaussian shutter while keeping the center frame crisp.
+            // Blur is a weighted temporal window. High-frame-rate recordings already
+            // contain the sub-frames, so they are blended directly (fast and artefact
+            // free). Only low-frame-rate sources are motion-interpolated first, and
+            // never above 480 fps, because minterpolate's motion search is
+            // single-threaded and would otherwise stall at 0% on long 1080p clips.
             let target = f64::from(settings.target_fps);
-            let working_fps = (source_fps.max(target) * 5.0).round().clamp(target, 960.0) as u32;
             let samples = u32::from(settings.blur_samples);
-            let weights = binomial_weights(samples);
-            filters.push(format!(
-                "minterpolate=fps={working_fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,tmix=frames={samples}:weights='{weights}',fps=fps={}:round=near",
-                settings.target_fps
-            ));
+            let ratio = source_fps / target;
+            let odd = |n: u32| if n % 2 == 0 { n + 1 } else { n };
+            let filter = if ratio >= 2.0 {
+                let frames = odd(samples.min(2 * ratio.round() as u32 + 1).max(3));
+                format!(
+                    "tmix=frames={frames}:weights='{}',fps=fps={}:round=near",
+                    binomial_weights(frames),
+                    settings.target_fps
+                )
+            } else {
+                let factor = samples.clamp(3, 8);
+                let working_fps = (target * f64::from(factor)).min(480.0).round() as u32;
+                let frames = odd((working_fps as f64 / target).round() as u32);
+                format!(
+                    "minterpolate=fps={working_fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,tmix=frames={frames}:weights='{}',fps=fps={}:round=near",
+                    binomial_weights(frames),
+                    settings.target_fps
+                )
+            };
+            filters.push(filter);
         }
-    }
-    if settings.shadow_lift && settings.render_mode != RenderMode::Quality {
+    }    if settings.shadow_lift && settings.render_mode != RenderMode::Quality {
         // Lift dark and mid-tone luminance while protecting highlights. This is
         // intentionally a creative Minecraft look, not automatic color management.
         filters.push("eq=gamma=1.18:gamma_weight=0.82".to_owned());
@@ -973,7 +988,7 @@ mod render_filter_tests {
         };
         assert_eq!(
             render_filter(&settings, None, 120.0, false).as_deref(),
-            Some("minterpolate=fps=600:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,tmix=frames=5:weights='1 4 6 4 1',fps=fps=60:round=near")
+            Some("tmix=frames=5:weights='1 4 6 4 1',fps=fps=60:round=near")
         );
     }
 
