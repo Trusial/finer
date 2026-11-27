@@ -9,9 +9,12 @@ Finer 1.2 adds automatic sRGB-to-Rec.709 color management with a pass-through sw
 
 ## Getting started
 
-1. Extract the portable ZIP and open `Finer.exe`.
-2. Choose Finer or Blender, then drag in one or more videos.
-3. Start the queue. A file called `clip.mp4` becomes `clip_finer.mp4`.
+1. Run `Finer-1.2.0-x64-setup.exe` once.
+2. Open the Windows Start menu and search for **Finer**.
+3. Choose Finer or Blender, then drag in one or more videos.
+4. Start the queue. A file called `clip.mp4` becomes `clip_finer.mp4`.
+
+The installer adds Finer to Windows Search and installs FFmpeg and FFprobe with the application. The portable ZIP remains available for use without installation; extract the complete archive before opening `Finer.exe`.
 
 Change video bitrate, GPU acceleration, output location, and advanced options under **Settings**.
 
@@ -36,3 +39,11 @@ rustup default stable-x86_64-pc-windows-msvc
 ```
 
 The portable ZIP lands in `release\`. See the [media tools notice](licenses/MEDIA-TOOLS.md) for the bundled FFmpeg and x264 sources and licenses.
+
+To create the searchable Windows installer from existing media tools:
+
+```powershell
+npm run build:installer -- -MediaTools .\media-tools\bin
+```
+
+The NSIS setup executable lands in `target\release\bundle\nsis\`.
