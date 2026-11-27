@@ -1,4 +1,5 @@
-﻿import * as Dialog from "@radix-ui/react-dialog";
+import type React from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import * as Switch from "@radix-ui/react-switch";
 import { ProgressBarStatus } from "@tauri-apps/api/window";
@@ -352,8 +353,9 @@ export function App() {
 
         <div className="studio-layout">
           <aside className="tool-rail">
-            <span className="rail-label">TOOLS</span>
-            <nav aria-label="Tools">
+            <span className="rail-label">Tools</span>
+            <nav aria-label="Tools" className="rail-nav" style={{ "--i": blenderActive ? 1 : 0 } as React.CSSProperties}>
+              <span className="pill-indicator" aria-hidden="true" />
               <button
                 className={!blenderActive ? "rail-tool is-active" : "rail-tool"}
                 aria-pressed={!blenderActive}
@@ -389,8 +391,8 @@ export function App() {
           <div className="content">
             {queue.jobs.length === 0 ? (
               <>
-                <div className="home-intro">
-                  <span className="eyebrow">{blenderActive ? "MOTION WORKSPACE" : "UPLOAD WORKSPACE"}</span>
+                <div className="home-intro" key={blenderActive ? "blender" : "finer"}>
+                  <span className="eyebrow">{blenderActive ? "Blender · Motion" : "Finer · Quality"}</span>
                   <h1 className="home-headline">
                     {blenderActive ? "Build motion." : "Make your video sharper."}
                   </h1>
@@ -457,14 +459,15 @@ export function App() {
 
           <aside className="inspector" aria-label="Output recipe">
             <div className="inspector-heading">
-              <span>OUTPUT</span>
-              <strong>{blenderActive ? "BLENDER" : "FINER"}</strong>
+              <span>Output</span>
+              <strong className="mode-chip" key={blenderActive ? "b" : "f"}>{blenderActive ? "Blender" : "Finer"}</strong>
             </div>
             {blenderActive ? (
               <>
-                <section className="inspector-section">
-                  <span className="inspector-label">METHOD</span>
-                  <div className="method-stack">
+                <section className="inspector-section swap-in">
+                  <span className="inspector-label">Method</span>
+                  <div className="method-stack" style={{ "--i": settings.renderMode === "motionBlur" ? 1 : 0 } as React.CSSProperties}>
+                    <span className="pill-indicator" aria-hidden="true" />
                     <button
                       className={settings.renderMode === "frameBlend" ? "method-button is-active" : "method-button"}
                       aria-pressed={settings.renderMode === "frameBlend"}
@@ -499,31 +502,31 @@ export function App() {
                 </section>
               </>
             ) : (
-              <section className="quality-recipe">
+              <section className="quality-recipe swap-in">
                 <div className="recipe-icon"><Gauge /></div>
                 <strong>TikTok Quality Pass</strong>
                 <p>Two-pass H.264 export with AAC compatibility patch and output validation.</p>
               </section>
             )}
             <section className="inspector-section recipe-stats">
-              <div><span>VIDEO</span><strong>H.264 HIGH</strong></div>
+              <div><span>Video</span><strong>H.264 High</strong></div>
               <div>
-                <span>{blenderActive ? "QUALITY" : "BITRATE"}</span>
-                <strong>{blenderActive ? "CRF 8 MASTER" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} MBPS`}</strong>
+                <span>{blenderActive ? "Quality" : "Bitrate"}</span>
+                <strong>{blenderActive ? "CRF 8 master" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} Mbps`}</strong>
               </div>
-              <div><span>ACCELERATION</span><strong>{blenderActive ? "CPU HQ" : settings.gpuEncoding ? "GPU" : "CPU"}</strong></div>
-              <div><span>SHADOWS</span><strong>{settings.shadowLift ? "LIFTED" : "NATURAL"}</strong></div>
+              <div><span>Acceleration</span><strong>{blenderActive ? "CPU HQ" : settings.gpuEncoding ? "GPU" : "CPU"}</strong></div>
+              <div><span>Bright Mode</span><strong>{settings.shadowLift ? "On" : "Off"}</strong></div>
             </section>
             <section className="inspector-section color-control">
               <div>
-                <strong>Shadow Lift</strong>
+                <strong>Bright Mode</strong>
                 <small>Brighter obsidian and dark blocks</small>
               </div>
               <Switch.Root
                 className="switch"
                 checked={settings.shadowLift}
                 onCheckedChange={(checked) => void updateRenderSettings({ shadowLift: checked })}
-                aria-label="Shadow Lift"
+                aria-label="Bright Mode"
               >
                 <Switch.Thumb />
               </Switch.Root>

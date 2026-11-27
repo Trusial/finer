@@ -292,7 +292,7 @@ export function SettingsDialog({
               <h3 id="color-settings">Color</h3>
               <Toggle
                 id="shadow-lift"
-                label="Shadow Lift"
+                label="Bright Mode"
                 checked={draft.shadowLift}
                 disabled={busy}
                 onChange={(checked) => update("shadowLift", checked)}
