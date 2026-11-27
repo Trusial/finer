@@ -320,7 +320,7 @@ export function App() {
         <header className="titlebar" data-tauri-drag-region>
           <div className="brand" data-tauri-drag-region>
             <img className="brand-mark" src={finerIcon} alt="" />
-            <span>FINER STUDIO</span>
+            <span>Finer</span>
             <span className="local-badge">LOCAL</span>
           </div>
           <div className="window-actions">
@@ -392,12 +392,12 @@ export function App() {
                 <div className="home-intro">
                   <span className="eyebrow">{blenderActive ? "MOTION WORKSPACE" : "UPLOAD WORKSPACE"}</span>
                   <h1 className="home-headline">
-                    {blenderActive ? "Build motion." : "Refine the source."}
+                    {blenderActive ? "Build motion." : "Make your video sharper."}
                   </h1>
                   <p>
                     {blenderActive
                       ? "Drop high-frame-rate footage into the stage. Your active recipe is shown on the right."
-                      : "Create clean H.264 exports with Finer's TikTok compatibility pass."}
+                      : "Clean H.264 exports with a TikTok quality pass."}
                   </p>
                 </div>
                 <button
@@ -409,7 +409,7 @@ export function App() {
                   <span className="upload-icon">
                     <Upload />
                   </span>
-                  <strong>{dragging ? "Release to add footage" : "Drop footage on the stage"}</strong>
+                  <strong>{dragging ? "Release to add your video" : "Drop your video here"}</strong>
                   <span className="drop-hint">MP4, MOV, MKV or WebM · Ctrl+O to browse</span>
                 </button>
               </>
@@ -457,7 +457,7 @@ export function App() {
 
           <aside className="inspector" aria-label="Output recipe">
             <div className="inspector-heading">
-              <span>OUTPUT RECIPE</span>
+              <span>OUTPUT</span>
               <strong>{blenderActive ? "BLENDER" : "FINER"}</strong>
             </div>
             {blenderActive ? (
