@@ -470,7 +470,7 @@ export function App() {
               </div>
               {blenderActive && (
                 <div className="stat-toggle">
-                  <span>Bright Mode<small>Brighter obsidian and dark blocks</small></span>
+                  <span>Bright Mode<small>Keeps the OBS look, like Premiere</small></span>
                   <Switch.Root
                     className="switch"
                     checked={settings.shadowLift}

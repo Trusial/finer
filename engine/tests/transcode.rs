@@ -239,7 +239,7 @@ async fn blender_modes_render_single_pass_master_quality() {
             .all(|&(pass, passes)| pass == 1 && passes == 1));
         let command = commands.into_inner().unwrap().join("\n");
         assert!(command.contains("\"-crf\" \"1\""));
-        assert!(command.contains("eq=gamma=1.18:gamma_weight=0.82"));
+        assert!(!command.contains("eq=gamma"));
         assert!(!command.contains("\"-pass\""));
     }
 }

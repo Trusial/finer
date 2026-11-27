@@ -298,7 +298,7 @@ export function SettingsDialog({
                 onChange={(checked) => update("shadowLift", checked)}
               />
               <p className="setting-help">
-                Brightens dark Minecraft blocks such as obsidian while protecting bright areas.
+                Keeps OBS recordings as bright as Premiere shows them (brighter obsidian). Off converts the sRGB curve exactly, which looks darker.
               </p>
             </section>
             <section className="settings-group" aria-labelledby="advanced-settings">
