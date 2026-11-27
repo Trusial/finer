@@ -2451,3 +2451,94 @@ button:focus-visible, [role="switch"]:focus-visible, .ios-select:focus-visible {
 *::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--text) 40%, transparent); border-width: 3px; }
 *::-webkit-scrollbar-button { display: none; height: 0; }
 .workspace { scrollbar-gutter: stable; }
+
+/* ===== Bloom-style motion: soft sliding card + glowing accent mark. Keep last. ===== */
+:root {
+  --bloom-ease: cubic-bezier(.22, 1, .36, 1);
+  --bloom-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ind-bg: rgba(17, 24, 39, .06);
+  --ind-line: rgba(17, 24, 39, .08);
+}
+:root[data-theme="dark"] { --ind-bg: rgba(255, 255, 255, .07); --ind-line: rgba(255, 255, 255, .1); }
+
+.pill-group > .pill,
+.pill-group.is-back > .pill {
+  transition: --pill-start .42s var(--bloom-ease), --pill-end .42s var(--bloom-ease), opacity .2s ease;
+}
+
+/* Sidebar: card slides, accent bar glows on the left edge */
+.rail-nav > .pill {
+  border-radius: 10px;
+  background: var(--ind-bg);
+  border: 1px solid var(--ind-line);
+  box-shadow: none;
+}
+.rail-nav > .pill::before {
+  content: "";
+  position: absolute;
+  left: -1px; top: 50%;
+  width: 3px; height: 16px; margin-top: -8px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+  box-shadow: 0 0 10px var(--primary);
+}
+.rail-nav .rail-tool { min-height: 40px; color: var(--secondary); transition: color .2s ease; }
+.rail-nav .rail-tool:hover:enabled { color: var(--text); background: transparent; }
+.rail-nav .rail-tool.is-active, .rail-nav .rail-tool.is-active:hover:enabled { color: var(--text); background: transparent; }
+.rail-nav .rail-tool.is-active > svg { color: var(--primary); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--primary) 55%, transparent)); }
+.rail-tool > svg { transition: color .2s ease, filter .3s ease; }
+
+/* Segmented: subtle card + accent underline */
+.segmented { padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--text) 5%, transparent); border: 1px solid var(--ind-line); }
+.segmented.axis-x > .pill { top: 3px; bottom: 3px; }
+.segmented > .pill,
+:root[data-theme="dark"] .segmented > .pill {
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid var(--ind-line);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+:root[data-theme="dark"] .segmented > .pill { background: rgba(255,255,255,.09); }
+.segmented > .pill::after {
+  content: "";
+  position: absolute;
+  left: 50%; bottom: -1px;
+  width: 18px; height: 2px; margin-left: -9px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+}
+.segment { min-height: 32px; border-radius: 7px; font-size: 12.5px; transition: color .2s ease; }
+.segment.is-active svg { color: var(--primary); }
+
+/* Switch: Bloom glow */
+.switch[data-state="checked"] { background: var(--primary); box-shadow: 0 0 14px -2px var(--primary); }
+.switch[data-state="checked"]:hover:enabled { background: var(--primary); }
+.switch > span { transition: transform .35s var(--bloom-spring), width .2s ease; }
+
+/* Primary button: shine sweep on hover */
+.button-primary { position: relative; overflow: hidden; box-shadow: 0 8px 20px -8px var(--primary), inset 0 1px 0 rgba(255,255,255,.25); }
+.button-primary::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.28) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform .9s var(--bloom-ease);
+  pointer-events: none;
+}
+.button-primary:hover:enabled::before { transform: translateX(120%); }
+.button-primary:hover:enabled { filter: brightness(1.06); }
+
+/* Content swaps like Bloom */
+.home-intro, .swap-in, .mode-hint, .queue-section { animation: bloom-swap .6s var(--bloom-ease) both; }
+@keyframes bloom-swap { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.ios-menu, .row-menu { animation: bloom-menu .22s var(--bloom-ease) both; }
+@keyframes bloom-menu { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+.modal { animation: bloom-box .35s var(--bloom-ease) both; }
+@keyframes bloom-box { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* Bloom scrollbar */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb,
+*:hover::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 8px; background: color-mix(in srgb, var(--text) 12%, transparent) padding-box; }
+*::-webkit-scrollbar-thumb:hover { border-width: 2px; background-color: color-mix(in srgb, var(--text) 24%, transparent); }
