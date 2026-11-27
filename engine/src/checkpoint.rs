@@ -30,7 +30,7 @@ pub(crate) struct CheckpointKey {
     render_mode: RenderMode,
     target_fps: u32,
     blur_samples: u8,
-    color_management: bool,
+    shadow_lift: bool,
 }
 
 impl CheckpointKey {
@@ -62,7 +62,7 @@ impl CheckpointKey {
                 render_mode: settings.render_mode,
                 target_fps: settings.target_fps,
                 blur_samples: settings.blur_samples,
-                color_management: settings.color_management,
+                shadow_lift: settings.shadow_lift,
             })
         })
         .await

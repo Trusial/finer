@@ -17,7 +17,7 @@ export type Settings = {
   renderMode: "quality" | "frameBlend" | "motionBlur";
   targetFps: number;
   blurSamples: number;
-  colorManagement: boolean;
+  shadowLift: boolean;
 };
 
 export const bitrateStepKbps = 16_617;
@@ -29,15 +29,15 @@ export const defaults: Settings = {
   useSourceDirectory: true,
   threads: 16,
   gpuDecoding: true,
-  gpuEncoding: true,
-  videoBitrateKbps: bitrateStepKbps,
+  gpuEncoding: false,
+  videoBitrateKbps: bitrateStepKbps * bitrateSteps,
   openFolderAfterConversion: false,
   keepLogs: false,
   ffmpegPath: null,
   renderMode: "quality",
   targetFps: 60,
-  blurSamples: 4,
-  colorManagement: true,
+  blurSamples: 5,
+  shadowLift: false,
 };
 
 export type FrameSize = { width: number; height: number };
@@ -70,7 +70,7 @@ export type Output = {
   audioPatch: AudioPatch;
   encoder: "libx264" | "h264_nvenc" | "h264_mf";
   decoder: "cpu" | "d3d11va" | "cuda";
-  colorAdjusted: boolean;
+  shadowLifted: boolean;
 };
 export type Progress = {
   pass: 1 | 2;

@@ -58,7 +58,7 @@ export function ExportDetails({ output, onClose, returnFocus }: {
               <div><dt>Decoding</dt><dd>{decoders[output.decoder]}</dd></div>
               <div><dt>File size</dt><dd>{sizeLabel(output.size)}</dd></div>
               <div><dt>Audio patch</dt><dd>{patchMessages[output.audioPatch]}</dd></div>
-              <div><dt>Color management</dt><dd>{output.colorAdjusted ? "sRGB → Rec.709" : "Pass through"}</dd></div>
+              <div><dt>Shadow Lift</dt><dd>{output.shadowLifted ? "Applied" : "Off"}</dd></div>
             </dl>
           </div>
         </Dialog.Content>

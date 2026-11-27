@@ -291,14 +291,14 @@ export function SettingsDialog({
             <section className="settings-group" aria-labelledby="color-settings">
               <h3 id="color-settings">Color</h3>
               <Toggle
-                id="color-management"
-                label="Automatic color management"
-                checked={draft.colorManagement}
+                id="shadow-lift"
+                label="Shadow Lift"
+                checked={draft.shadowLift}
                 disabled={busy}
-                onChange={(checked) => update("colorManagement", checked)}
+                onChange={(checked) => update("shadowLift", checked)}
               />
               <p className="setting-help">
-                Converts tagged sRGB footage to Rec.709, similar to Premiere. Other footage passes through unchanged.
+                Brightens dark Minecraft blocks such as obsidian while protecting bright areas.
               </p>
             </section>
             <section className="settings-group" aria-labelledby="advanced-settings">

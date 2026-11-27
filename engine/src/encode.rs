@@ -1,4 +1,4 @@
-use crate::{
+﻿use crate::{
     acceleration::{download_format, Acceleration, GpuEncoder},
     checkpoint::CheckpointKey,
     media::{detect_patch, encoder_time_base, null_device, probe, LOCAL_FORMATS},
@@ -131,12 +131,8 @@ async fn encode(
     } else {
         format!("1:{}", job.settings.target_fps)
     };
-    let color_adjusted = job.settings.color_management
-        && media
-            .color_transfer
-            .as_deref()
-            .is_some_and(is_srgb_transfer);
-    let video_filter = render_filter(&job.settings, job.frame_size, media.fps, color_adjusted);
+    let shadow_lifted = job.settings.shadow_lift;
+    let video_filter = render_filter(&job.settings, job.frame_size, media.fps);
     let directory = output_directory(&job.source, job.directory.as_deref(), &job.settings)
         .expect("absolute video path has a parent")
         .to_owned();
@@ -184,7 +180,6 @@ async fn encode(
         gpu_level,
         time_base,
         output_fps,
-        color_adjusted,
         filter: video_filter.as_deref(),
         filter_threads: resize_threads(&media, job.frame_size, job.settings.threads),
         started,
@@ -260,7 +255,7 @@ async fn encode(
         audio_patch,
         encoder: video_encoder,
         decoder: decoder.unwrap_or("cpu"),
-        color_adjusted,
+        shadow_lifted,
     })
 }
 
@@ -335,20 +330,12 @@ fn fit_filter(FrameSize { width, height }: FrameSize) -> String {
     )
 }
 
-fn is_srgb_transfer(value: &str) -> bool {
-    matches!(value.to_ascii_lowercase().as_str(), "srgb" | "iec61966-2-1")
-}
-
 fn render_filter(
     settings: &Settings,
     resize: Option<FrameSize>,
     source_fps: f64,
-    color_adjusted: bool,
 ) -> Option<String> {
     let mut filters = Vec::new();
-    if color_adjusted {
-        filters.push("colorspace=ispace=bt709:iprimaries=bt709:itrc=iec61966-2-1:space=bt709:primaries=bt709:trc=bt709:format=yuv420p".to_owned());
-    }
     if let Some(size) = resize {
         filters.push(fit_filter(size));
     }
@@ -362,31 +349,51 @@ fn render_filter(
                     .collect::<Vec<_>>()
                     .join(" ");
                 filters.push(format!(
-                    "tmix=frames={frames}:weights='{weights}',fps={}",
+                    "tmix=frames={frames}:weights='{weights}',fps=fps={}:round=near",
                     settings.target_fps
                 ));
             } else if source_fps < target * 0.995 {
                 filters.push(format!(
-                    "framerate=fps={}:interp_start=0:interp_end=255:scene=100",
+                    "minterpolate=fps={}:mi_mode=blend:scd=fdiff:scd_threshold=10",
                     settings.target_fps
                 ));
             } else {
-                filters.push(format!("fps={}", settings.target_fps));
+                filters.push(format!("fps=fps={}:round=near", settings.target_fps));
             }
         }
         RenderMode::MotionBlur => {
-            let working_fps = settings
-                .target_fps
-                .saturating_mul(u32::from(settings.blur_samples))
-                .min(960);
-            let samples = (working_fps / settings.target_fps).max(2);
+            // f0e/blur recommends interpolating to about 5x the working frame rate,
+            // then blending an odd, symmetric temporal window. A binomial kernel
+            // approximates a Gaussian shutter while keeping the center frame crisp.
+            let target = f64::from(settings.target_fps);
+            let working_fps = (source_fps.max(target) * 5.0).round().clamp(target, 960.0) as u32;
+            let samples = u32::from(settings.blur_samples);
+            let weights = binomial_weights(samples);
             filters.push(format!(
-                "minterpolate=fps={working_fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,tmix=frames={samples},fps={}",
+                "minterpolate=fps={working_fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,tmix=frames={samples}:weights='{weights}',fps=fps={}:round=near",
                 settings.target_fps
             ));
         }
     }
+    if settings.shadow_lift {
+        // Lift dark and mid-tone luminance while protecting highlights. This is
+        // intentionally a creative Minecraft look, not automatic color management.
+        filters.push("eq=gamma=1.18:gamma_weight=0.82".to_owned());
+    }
     (!filters.is_empty()).then(|| filters.join(","))
+}
+
+fn binomial_weights(samples: u32) -> String {
+    let row = samples.saturating_sub(1);
+    let mut value = 1_u64;
+    let mut weights = Vec::with_capacity(samples as usize);
+    for index in 0..samples {
+        weights.push(value.to_string());
+        if index < row {
+            value = value * u64::from(row - index) / u64::from(index + 1);
+        }
+    }
+    weights.join(" ")
 }
 
 fn resize_threads(media: &Media, resize: Option<FrameSize>, threads: u16) -> u8 {
@@ -409,7 +416,6 @@ struct Encoder<'a> {
     gpu_level: &'static str,
     time_base: String,
     output_fps: f64,
-    color_adjusted: bool,
     filter: Option<&'a str>,
     filter_threads: u8,
     started: Instant,
@@ -419,6 +425,7 @@ struct Encoder<'a> {
 enum Pass {
     Analysis,
     SoftwareOutput,
+    MasterOutput,
     GpuOutput(GpuEncoder),
 }
 
@@ -481,8 +488,23 @@ impl Encoder<'_> {
         log: &mut Log<'_>,
         mut checkpoint: Option<&mut Option<PassCheckpoint>>,
     ) -> Result<Encoded, Error> {
-        // Blender prioritizes the same high-quality two-pass software path Premiere uses
-        // for final export. GPU decoding can still accelerate source reads.
+        if self.job.settings.render_mode != RenderMode::Quality {
+            if let Some(slot) = checkpoint.as_deref_mut() {
+                *slot = None;
+            }
+            for decode in acceleration.decode_options(None) {
+                match self.master_export(decode, target, cancel, log).await {
+                    Err(error) if decode.is_some() && can_retry(&error) => {
+                        report_decode_failure(log, decode.expect("checked above"), &error);
+                    }
+                    result => return result,
+                }
+            }
+            unreachable!("CPU decoding is always tried")
+        }
+
+        // Finer can use the configured encoder. Blender returned above through the
+        // visually lossless master path; GPU decoding may still accelerate source reads.
         let mut try_gpu =
             self.job.settings.gpu_encoding && self.job.settings.render_mode == RenderMode::Quality;
         if let Some(slot) = checkpoint.as_deref_mut() {
@@ -557,6 +579,33 @@ impl Encoder<'_> {
             }
         }
         unreachable!("CPU decoding is always tried")
+    }
+
+    async fn master_export(
+        &self,
+        decoder: Option<&'static str>,
+        target: &ExportTarget<'_>,
+        cancel: &CancellationToken,
+        log: &mut Log<'_>,
+    ) -> Result<Encoded, Error> {
+        let frames = self
+            .run(
+                Pass::MasterOutput,
+                decoder,
+                target.path,
+                target.path,
+                cancel,
+                log,
+            )
+            .await?
+            .frame;
+        let media = self.verify(target, frames, false, cancel).await?;
+        Ok(Encoded {
+            media,
+            frames,
+            encoder: "libx264",
+            decoder,
+        })
     }
 
     async fn gpu_export(
@@ -724,6 +773,7 @@ impl Encoder<'_> {
         let (number, total) = match pass {
             Pass::Analysis => (1, 2),
             Pass::SoftwareOutput => (2, 2),
+            Pass::MasterOutput => (1, 1),
             Pass::GpuOutput(_) => (1, 1),
         };
         let encoder = pass.name();
@@ -802,23 +852,32 @@ impl Encoder<'_> {
         }
         if !matches!(pass, Pass::Analysis) {
             if let Some(index) = media.audio_index {
-                command.args([
-                    "-map",
-                    &format!("0:{index}"),
-                    "-c:a",
-                    "aac",
-                    "-profile:a",
-                    "aac_low",
-                    "-b:a",
-                    "160k",
-                ]);
+                command.args(["-map", &format!("0:{index}")]);
+                if media.audio_codec.as_deref() == Some("aac")
+                    && media.audio_profile.as_deref() == Some("LC")
+                    && media.sample_rate == Some(48_000)
+                    && media.channel_layout.as_deref() == Some("stereo")
+                {
+                    command.args(["-c:a", "copy"]);
+                } else {
+                    command.args([
+                        "-c:a",
+                        "aac",
+                        "-profile:a",
+                        "aac_low",
+                        "-b:a",
+                        "320k",
+                        "-ar",
+                        "48000",
+                        "-ac",
+                        "2",
+                    ]);
+                }
             }
         }
         command.args([
             "-map_chapters",
             "-1",
-            "-b:v",
-            &format!("{}k", settings.video_bitrate_kbps),
             "-fps_mode:v",
             "passthrough",
             "-enc_time_base:v",
@@ -826,20 +885,9 @@ impl Encoder<'_> {
             "-g",
             "250",
         ]);
-        if self.color_adjusted {
-            command.args([
-                "-colorspace:v",
-                "bt709",
-                "-color_primaries:v",
-                "bt709",
-                "-color_trc:v",
-                "bt709",
-                "-color_range:v",
-                "tv",
-            ]);
-        }
         match pass {
             Pass::GpuOutput(encoder) => {
+                command.args(["-b:v", &format!("{}k", settings.video_bitrate_kbps)]);
                 encoder.configure(&mut command, self.gpu_level, cuda_frames)
             }
             Pass::Analysis | Pass::SoftwareOutput => {
@@ -849,12 +897,22 @@ impl Encoder<'_> {
                     "2"
                 };
                 command.args([
-                "-c:v", "libx264", "-preset", "faster",
+                "-b:v", &format!("{}k", settings.video_bitrate_kbps),
+                "-c:v", "libx264", "-preset", "slow",
                 "-profile:v", "high", "-level:v", self.level, "-pix_fmt", "yuv420p",
-                "-keyint_min", "25", "-sc_threshold", "40", "-refs", "2", "-bf", "3",
-                "-x264-params", "b-adapt=1:b-pyramid=2:rc-lookahead=20:mbtree=1:aq-mode=1:aq-strength=1.0:psy-rd=1.0,0.0",
+                "-keyint_min", "25", "-sc_threshold", "40", "-refs", "5", "-bf", "3",
+                "-x264-params", "b-adapt=2:b-pyramid=2:rc-lookahead=50:mbtree=1:aq-mode=3:aq-strength=0.8:psy-rd=1.0,0.0",
                 "-threads:v", &settings.threads.to_string(), "-pass", number, "-passlogfile",
             ]).arg(passlog);
+            }
+            Pass::MasterOutput => {
+                command.args([
+                    "-c:v", "libx264", "-preset", "slow", "-crf", "8",
+                    "-profile:v", "high", "-level:v", self.level, "-pix_fmt", "yuv420p",
+                    "-keyint_min", "25", "-sc_threshold", "40", "-refs", "5", "-bf", "3",
+                    "-x264-params", "b-adapt=2:b-pyramid=2:rc-lookahead=50:mbtree=1:aq-mode=3:aq-strength=0.8:psy-rd=1.0,0.0",
+                    "-threads:v", &settings.threads.to_string(),
+                ]);
             }
         }
         if matches!(pass, Pass::Analysis) {
@@ -885,8 +943,8 @@ mod render_filter_tests {
             ..Settings::default()
         };
         assert_eq!(
-            render_filter(&settings, None, 120.0, false).as_deref(),
-            Some("tmix=frames=2:weights='1 1',fps=60")
+            render_filter(&settings, None, 120.0).as_deref(),
+            Some("tmix=frames=2:weights='1 1',fps=fps=60:round=near")
         );
     }
 
@@ -895,21 +953,24 @@ mod render_filter_tests {
         let settings = Settings {
             render_mode: RenderMode::MotionBlur,
             target_fps: 60,
-            blur_samples: 4,
+            blur_samples: 5,
             ..Settings::default()
         };
         assert_eq!(
-            render_filter(&settings, None, 120.0, false).as_deref(),
-            Some("minterpolate=fps=240:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,tmix=frames=4,fps=60")
+            render_filter(&settings, None, 120.0).as_deref(),
+            Some("minterpolate=fps=600:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,tmix=frames=5:weights='1 4 6 4 1',fps=fps=60:round=near")
         );
     }
 
     #[test]
-    fn srgb_color_management_converts_to_rec709_before_rendering() {
-        let settings = Settings::default();
+    fn shadow_lift_brightens_dark_tones_without_color_conversion() {
+        let settings = Settings {
+            shadow_lift: true,
+            ..Settings::default()
+        };
         assert_eq!(
-            render_filter(&settings, None, 60.0, true).as_deref(),
-            Some("colorspace=ispace=bt709:iprimaries=bt709:itrc=iec61966-2-1:space=bt709:primaries=bt709:trc=bt709:format=yuv420p")
+            render_filter(&settings, None, 60.0).as_deref(),
+            Some("eq=gamma=1.18:gamma_weight=0.82")
         );
     }
 }

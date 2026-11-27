@@ -1,4 +1,4 @@
-use crate::Error;
+﻿use crate::Error;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -44,7 +44,7 @@ pub struct Settings {
     pub render_mode: RenderMode,
     pub target_fps: u32,
     pub blur_samples: u8,
-    pub color_management: bool,
+    pub shadow_lift: bool,
 }
 
 impl Default for Settings {
@@ -55,15 +55,15 @@ impl Default for Settings {
             use_source_directory: true,
             threads: 16,
             gpu_decoding: true,
-            gpu_encoding: true,
-            video_bitrate_kbps: DEFAULT_VIDEO_BITRATE_KBPS,
+            gpu_encoding: false,
+            video_bitrate_kbps: MAX_VIDEO_BITRATE_KBPS,
             open_folder_after_conversion: false,
             keep_logs: false,
             ffmpeg_path: None,
             render_mode: RenderMode::Quality,
             target_fps: 60,
-            blur_samples: 4,
-            color_management: true,
+            blur_samples: 5,
+            shadow_lift: false,
         }
     }
 }
@@ -99,7 +99,10 @@ impl Settings {
             settings.ffmpeg_path = None;
         }
         settings.target_fps = settings.target_fps.clamp(24, 240);
-        settings.blur_samples = settings.blur_samples.clamp(2, 16);
+        settings.blur_samples = settings.blur_samples.clamp(3, 15);
+        if settings.blur_samples.is_multiple_of(2) {
+            settings.blur_samples += 1;
+        }
         settings
     }
 
@@ -142,10 +145,10 @@ impl Settings {
                 "",
             ));
         }
-        if !(2..=16).contains(&self.blur_samples) {
+        if !(3..=15).contains(&self.blur_samples) || self.blur_samples.is_multiple_of(2) {
             return Err(Error::new(
                 "settings",
-                "Choose 2 to 16 motion blur samples.",
+                "Choose an odd number of motion blur samples from 3 to 15.",
                 "",
             ));
         }

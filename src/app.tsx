@@ -1,4 +1,4 @@
-import * as Dialog from "@radix-ui/react-dialog";
+﻿import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import * as Switch from "@radix-ui/react-switch";
 import { ProgressBarStatus } from "@tauri-apps/api/window";
@@ -410,7 +410,7 @@ export function App() {
                     <Upload />
                   </span>
                   <strong>{dragging ? "Release to add your video" : "Drop your video here"}</strong>
-                  <span className="drop-hint">MP4, MOV, MKV or WebM · Ctrl+O to browse</span>
+                  <span className="drop-hint">MP4, MOV, MKV or WebM Â· Ctrl+O to browse</span>
                 </button>
               </>
             ) : (
@@ -492,7 +492,7 @@ export function App() {
                     <label>
                       <span>Temporal samples</span>
                       <select value={settings.blurSamples} onChange={(event) => void updateRenderSettings({ blurSamples: Number(event.target.value) })}>
-                        {[2, 4, 6, 8, 12, 16].map((samples) => <option key={samples} value={samples}>{samples} samples</option>)}
+                        {[3, 5, 7, 9, 11, 13, 15].map((samples) => <option key={samples} value={samples}>{samples} samples</option>)}
                       </select>
                     </label>
                   )}
@@ -507,20 +507,23 @@ export function App() {
             )}
             <section className="inspector-section recipe-stats">
               <div><span>VIDEO</span><strong>H.264 HIGH</strong></div>
-              <div><span>BITRATE</span><strong>{(settings.videoBitrateKbps / 1000).toFixed(1)} MBPS</strong></div>
+              <div>
+                <span>{blenderActive ? "QUALITY" : "BITRATE"}</span>
+                <strong>{blenderActive ? "CRF 8 MASTER" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} MBPS`}</strong>
+              </div>
               <div><span>ACCELERATION</span><strong>{blenderActive ? "CPU HQ" : settings.gpuEncoding ? "GPU" : "CPU"}</strong></div>
-              <div><span>COLOR</span><strong>{settings.colorManagement ? "AUTO" : "BYPASS"}</strong></div>
+              <div><span>SHADOWS</span><strong>{settings.shadowLift ? "LIFTED" : "NATURAL"}</strong></div>
             </section>
             <section className="inspector-section color-control">
               <div>
-                <strong>Color management</strong>
-                <small>sRGB → Rec.709 when detected</small>
+                <strong>Shadow Lift</strong>
+                <small>Brighter obsidian and dark blocks</small>
               </div>
               <Switch.Root
                 className="switch"
-                checked={settings.colorManagement}
-                onCheckedChange={(checked) => void updateRenderSettings({ colorManagement: checked })}
-                aria-label="Automatic color management"
+                checked={settings.shadowLift}
+                onCheckedChange={(checked) => void updateRenderSettings({ shadowLift: checked })}
+                aria-label="Shadow Lift"
               >
                 <Switch.Thumb />
               </Switch.Root>

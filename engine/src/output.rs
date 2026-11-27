@@ -18,7 +18,7 @@ pub struct Output {
     pub audio_patch: AudioPatch,
     pub encoder: &'static str,
     pub decoder: &'static str,
-    pub color_adjusted: bool,
+    pub shadow_lifted: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

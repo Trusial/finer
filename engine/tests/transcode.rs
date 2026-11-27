@@ -1,6 +1,6 @@
-use finer_engine::{
+﻿use finer_engine::{
     convert, convert_with_retry, inspect, plan_outputs, AudioPatch, Conversion, Event, FrameSize,
-    Settings, Tools,
+    RenderMode, Settings, Tools,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -164,7 +164,7 @@ async fn resize_and_higher_bitrate() {
     let kept = probe(&tools.ffprobe, &kept.path, false);
     assert_eq!(kept["streams"][0]["width"], 640);
     assert_eq!(kept["streams"][0]["height"], 480);
-    assert_eq!(kept["streams"][0]["level"], 42);
+    assert_eq!(kept["streams"][0]["level"], 50);
 
     let mut resized = job(&input, base, &tools);
     resized.frame_size = Some(suggested);
@@ -194,13 +194,65 @@ async fn resize_and_higher_bitrate() {
 
 #[tokio::test]
 #[ignore = "requires FFmpeg and FFprobe 7.1+ with libx264 on PATH or set via environment"]
+async fn blender_modes_render_single_pass_master_quality() {
+    let folder = tempfile::tempdir().unwrap();
+    let base = folder.path();
+    let tools = tools();
+    let input = base.join("motion-source.mp4");
+    fixture(
+        &tools.ffmpeg,
+        &input,
+        "testsrc2=size=320x180:rate=120:duration=0.25",
+        "libx264",
+        None,
+    );
+
+    for mode in [RenderMode::FrameBlend, RenderMode::MotionBlur] {
+        let mut conversion = job(&input, base, &tools);
+        conversion.settings.render_mode = mode;
+        conversion.settings.target_fps = 60;
+        conversion.settings.blur_samples = 5;
+        conversion.settings.shadow_lift = true;
+        let events = Mutex::new(Vec::new());
+        let commands = Mutex::new(Vec::new());
+        let output = convert(conversion, CancellationToken::new(), |event| {
+            if let Event::Progress { pass, passes, .. } = &event {
+                events.lock().unwrap().push((*pass, *passes));
+            }
+            if let Event::Log { line } = event {
+                if line.contains("libx264") {
+                    commands.lock().unwrap().push(line);
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        let metadata = probe(&tools.ffprobe, &output.path, false);
+        assert_eq!(metadata["streams"][0]["avg_frame_rate"], "60/1");
+        assert_eq!(metadata["streams"][0]["nb_frames"], "15");
+        assert!(output.shadow_lifted);
+        assert!(events
+            .into_inner()
+            .unwrap()
+            .iter()
+            .all(|&(pass, passes)| pass == 1 && passes == 1));
+        let command = commands.into_inner().unwrap().join("\n");
+        assert!(command.contains("\"-crf\" \"8\""));
+        assert!(command.contains("eq=gamma=1.18:gamma_weight=0.82"));
+        assert!(!command.contains("\"-pass\""));
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires FFmpeg and FFprobe 7.1+ with libx264 on PATH or set via environment"]
 async fn inputs_progress_collision_and_errors() {
     let b = tools();
     let base = tempfile::tempdir().unwrap();
     let folder = base.path();
     let cases = [
         (
-            "montaż & test.mp4",
+            "montaÅ¼ & test.mp4",
             "testsrc2=s=320x180:r=60:d=2",
             "libx264",
             Some("44100"),
@@ -260,7 +312,7 @@ async fn inputs_progress_collision_and_errors() {
         let video = &metadata["streams"][0];
         assert_eq!(video["codec_name"], "h264");
         assert_eq!(video["profile"], "High");
-        assert_eq!(video["level"], 42);
+        assert_eq!(video["level"], 50);
         assert_eq!(video["avg_frame_rate"], fps);
         assert_eq!(video["nb_frames"], frame_count.to_string());
         assert_eq!(video["width"], media.width);
@@ -269,7 +321,9 @@ async fn inputs_progress_collision_and_errors() {
             let audio = &metadata["streams"][1];
             assert_eq!(audio["codec_name"], "aac");
             assert_eq!(audio["profile"], "LC");
-            assert_eq!(audio["sample_rate"], rate);
+            // Finer normalizes every re-encoded track to 48 kHz stereo for TikTok.
+            let _ = rate;
+            assert_eq!(audio["sample_rate"], "48000");
         } else {
             assert_eq!(metadata["streams"].as_array().unwrap().len(), 1);
         }
@@ -292,13 +346,13 @@ async fn inputs_progress_collision_and_errors() {
         no_staging(folder);
     }
 
-    let input = folder.join("montaż & test.mp4");
-    let old_file = folder.join("montaż & test_finer.mp4");
+    let input = folder.join("montaÅ¼ & test.mp4");
+    let old_file = folder.join("montaÅ¼ & test_finer.mp4");
     let old_length = fs::metadata(&old_file).unwrap().len();
     let output = convert(job(&input, folder, &b), CancellationToken::new(), |_| {})
         .await
         .unwrap();
-    assert_eq!(output.name, "montaż & test_finer_2.mp4");
+    assert_eq!(output.name, "montaÅ¼ & test_finer_2.mp4");
     assert_eq!(fs::metadata(&old_file).unwrap().len(), old_length);
     assert_eq!(fs::read_dir(folder.join("logs")).unwrap().count(), 5);
     no_staging(folder);
@@ -367,9 +421,9 @@ fn settings_round_trip_and_invalid_json() {
     let path = folder.path().join("prefs/settings.json");
     let defaults = Settings::load(&path);
     assert_eq!(defaults.threads, 16);
-    assert_eq!(defaults.video_bitrate_kbps, 16_617);
+    assert_eq!(defaults.video_bitrate_kbps, 16_617 * 7);
     assert!(defaults.use_source_directory);
-    assert!(defaults.gpu_encoding && defaults.gpu_decoding);
+    assert!(!defaults.gpu_encoding && defaults.gpu_decoding);
     let custom = Settings {
         theme: finer_engine::Theme::Dark,
         output_directory: Some(folder.path().to_owned()),
@@ -392,7 +446,7 @@ fn settings_round_trip_and_invalid_json() {
     assert!(!round_trip.gpu_encoding && round_trip.gpu_decoding);
     assert!(matches!(round_trip.theme, finer_engine::Theme::Dark));
     fs::write(&path, r#"{"threads":8,"theme":"dark"}"#).unwrap();
-    assert_eq!(Settings::load(&path).video_bitrate_kbps, 16_617);
+    assert_eq!(Settings::load(&path).video_bitrate_kbps, 16_617 * 7);
     fs::write(&path, r#"{"threads":8,"videoBitrateKbps":100001}"#).unwrap();
     assert_eq!(Settings::load(&path).video_bitrate_kbps, 99_702);
     assert_eq!(Settings::load(&path).threads, 8);
@@ -628,13 +682,19 @@ async fn cfr_1080p60_against_reference_flags() {
             "-c:v",
             "libx264",
             "-preset",
-            "faster",
+            "slow",
             "-b:v",
-            "16617k",
+            "116319k",
             "-profile:v",
             "high",
             "-level:v",
-            "4.2",
+            "5.0",
+            "-refs",
+            "5",
+            "-bf",
+            "3",
+            "-x264-params",
+            "b-adapt=2:b-pyramid=2:rc-lookahead=50:mbtree=1:aq-mode=3:aq-strength=0.8:psy-rd=1.0,0.0",
             "-pix_fmt",
             "yuv420p",
             "-g",
@@ -730,7 +790,7 @@ async fn interrupted_second_pass_reuses_exact_stats() {
 
         let mut retry = job(&input, base, &tools);
         if change == "bitrate" {
-            retry.settings.video_bitrate_kbps *= 2;
+            retry.settings.video_bitrate_kbps = 33_234;
         }
         if change == "source" {
             let mut bytes = fs::read(&input).unwrap();
@@ -840,7 +900,7 @@ async fn reports_why_audio_patch_was_skipped() {
     let tools = tools();
     for (audio_rate, expected) in [
         (None, AudioPatch::NoAudio),
-        (Some("44100"), AudioPatch::NeedsStereo),
+        (Some("44100"), AudioPatch::Applied),
     ] {
         let source = base.join(format!("source-{}.mp4", audio_rate.unwrap_or("silent")));
         fixture(
