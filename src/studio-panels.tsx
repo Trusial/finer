@@ -214,7 +214,7 @@ export function RowMenu({ label, actions }: { label: string; actions: RowAction[
  * (UIKit-like response/damping), stretches slightly with its velocity, shrinks
  * while pressed and can be dragged across segments before it snaps.
  */
-const SPRING = { response: 0.38, damping: 0.86 };
+const SPRING = { response: 0.26, damping: 1 };
 
 export function PillGroup({
   className,
@@ -239,8 +239,8 @@ export function PillGroup({
     const s = state.current;
     const el = thumb.current;
     if (!el) return;
-    const stretch = Math.min(Math.abs(s.vel) / 2600, 0.22);
-    const press = s.pressed ? 0.95 : 1;
+    const stretch = 0;
+    const press = s.pressed ? 0.97 : 1;
     const main = (1 + stretch) * press;
     const cross = (1 - stretch * 0.35) * press;
     const translate = axis === "x" ? `translate3d(${s.pos}px,0,0)` : `translate3d(0,${s.pos}px,0)`;
