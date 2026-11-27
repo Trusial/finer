@@ -1,4 +1,4 @@
-﻿use finer_engine::{
+use finer_engine::{
     convert, convert_with_retry, inspect, plan_outputs, AudioPatch, Conversion, Event, FrameSize,
     RenderMode, Settings, Tools,
 };
