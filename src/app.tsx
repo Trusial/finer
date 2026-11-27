@@ -32,7 +32,6 @@ import { ResolutionDialog } from "./resolution-dialog";
 import { SettingsDialog } from "./settings-dialog";
 import { Button, Hint } from "./ui";
 import { CompareDialog, DoneCard, ExportProgress, IosSelect, PillGroup, RowMenu, type RowAction } from "./studio-panels";
-import finerIcon from "./finer-icon.png";
 
 export function App() {
   const { toasts, notify, dismiss } = useNotifications();
@@ -275,10 +274,7 @@ export function App() {
     <Tooltip.Provider delayDuration={480} skipDelayDuration={100}>
       <div className="app">
         <header className="titlebar" data-tauri-drag-region>
-          <div className="brand" data-tauri-drag-region>
-            <img className="brand-mark" src={finerIcon} alt="" />
-            <span>Finer</span>
-          </div>
+          <div className="brand" data-tauri-drag-region />
           <PillGroup
             className="mode-switch"
             axis="x"
@@ -346,17 +342,6 @@ export function App() {
           <div className="content">
             {queue.jobs.length === 0 ? (
               <>
-                <div className="home-intro" key={blenderActive ? "blender" : "finer"}>
-                  <span className="eyebrow">{blenderActive ? "Blender · Motion" : "Finer · Quality"}</span>
-                  <h1 className="home-headline">
-                    {blenderActive ? "Build motion." : "Make your video sharper."}
-                  </h1>
-                  <p>
-                    {blenderActive
-                      ? "Drop high-frame-rate footage into the stage. Your active recipe is shown on the right."
-                      : "Clean H.264 exports with a TikTok quality pass."}
-                  </p>
-                </div>
                 <button
                   className={`drop-zone ${dragging ? "is-dragging" : ""}`}
                   disabled={picking}
@@ -426,7 +411,6 @@ export function App() {
           <aside className="inspector" aria-label="Output recipe">
             <div className="inspector-heading">
               <span>Output</span>
-              <strong className="mode-chip" key={blenderActive ? "b" : "f"}>{blenderActive ? "Blender" : "Finer"}</strong>
             </div>
             {blenderActive ? (
               <section className="inspector-section mode-card swap-in">
@@ -448,9 +432,6 @@ export function App() {
                     <WandSparkles />Motion Blur
                   </button>
                 </PillGroup>
-                <p className="mode-hint" key={settings.renderMode}>
-                  {settings.renderMode === "motionBlur" ? "Interpolated shutter blur" : "Adjacent-frame mix"}
-                </p>
                 <div className="field-row">
                   <IosSelect
                     label="Frame rate"

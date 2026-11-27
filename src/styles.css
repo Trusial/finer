@@ -2778,3 +2778,7 @@ body,
 .ring-label strong { font-size: 26px; }
 .inspector-heading { padding: 0 2px 12px; }
 .mode-switch { width: 200px; }
+
+.drop-zone { aspect-ratio: 16 / 9; }
+.workspace.is-empty .content { padding-bottom: 0; }
+
