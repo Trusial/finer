@@ -54,7 +54,8 @@ export function ExportProgress({ job, timeLeft }: { job: Job; timeLeft: number |
 
   return (
     <section className="export-panel" aria-label="Export progress">
-      <div className="ring" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+      <div className="ring">
+        <span className="sr-only" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
         <svg viewBox="0 0 120 120" aria-hidden="true">
           <circle className="ring-track" cx="60" cy="60" r={radius} />
           <circle

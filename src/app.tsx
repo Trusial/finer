@@ -351,8 +351,8 @@ export function App() {
                   <span className="upload-icon">
                     <Upload />
                   </span>
-                  <strong>{dragging ? "Release to add your video" : "Drop your video here"}</strong>
-                  <span className="drop-hint">MP4, MOV, MKV or WebM · Ctrl+O to browse</span>
+                  <strong>{dragging ? "Release to add" : "Drag a video here"}</strong>
+                  <span className="drop-hint">or click to browse</span>
                 </button>
               </>
             ) : (
