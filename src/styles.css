@@ -531,9 +531,6 @@ svg { flex: none; width: 16px; height: 16px; stroke-width: 1.75; }
 @keyframes fade-out { to { opacity: 0; } }
 @keyframes pulse { 50% { opacity: 0.45; } }
 @keyframes spin { to { transform: rotate(1turn); } }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
-}
 
 @media (max-width: 900px) {
   .studio-layout { grid-template-columns: minmax(0, 1fr) 280px; }
