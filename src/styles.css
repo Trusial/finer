@@ -2747,3 +2747,7 @@ body,
   .studio-layout { grid-template-columns: minmax(0, 1fr) 260px; }
   .mode-switch { width: 180px; }
 }
+
+.caption-button:focus { outline: none; }
+.caption-button:focus-visible { outline: none; background: var(--fill); color: var(--text); }
+
