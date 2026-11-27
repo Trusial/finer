@@ -1,4 +1,4 @@
-﻿use crate::{
+use crate::{
     acceleration::{download_format, Acceleration, GpuEncoder},
     checkpoint::CheckpointKey,
     media::{detect_patch, encoder_time_base, null_device, probe, LOCAL_FORMATS},
@@ -132,7 +132,14 @@ async fn encode(
         format!("1:{}", job.settings.target_fps)
     };
     let shadow_lifted = job.settings.shadow_lift;
-    let video_filter = render_filter(&job.settings, job.frame_size, media.fps);
+    // OBS and similar recorders tag Rec.709 primaries with the sRGB transfer curve.
+    // Premiere converts that to a true Rec.709 curve on export; match it so the
+    // result looks the same in players and on TikTok.
+    let srgb_source = media
+        .color_transfer
+        .as_deref()
+        .is_some_and(is_srgb_transfer);
+    let video_filter = render_filter(&job.settings, job.frame_size, media.fps, srgb_source);
     let directory = output_directory(&job.source, job.directory.as_deref(), &job.settings)
         .expect("absolute video path has a parent")
         .to_owned();
@@ -330,12 +337,20 @@ fn fit_filter(FrameSize { width, height }: FrameSize) -> String {
     )
 }
 
+fn is_srgb_transfer(value: &str) -> bool {
+    matches!(value.to_ascii_lowercase().as_str(), "srgb" | "iec61966-2-1")
+}
+
 fn render_filter(
     settings: &Settings,
     resize: Option<FrameSize>,
     source_fps: f64,
+    srgb_source: bool,
 ) -> Option<String> {
     let mut filters = Vec::new();
+    if srgb_source {
+        filters.push("colorspace=ispace=bt709:iprimaries=bt709:itrc=iec61966-2-1:space=bt709:primaries=bt709:trc=bt709:format=yuv420p".to_owned());
+    }
     if let Some(size) = resize {
         filters.push(fit_filter(size));
     }
@@ -943,7 +958,7 @@ mod render_filter_tests {
             ..Settings::default()
         };
         assert_eq!(
-            render_filter(&settings, None, 120.0).as_deref(),
+            render_filter(&settings, None, 120.0, false).as_deref(),
             Some("tmix=frames=2:weights='1 1',fps=fps=60:round=near")
         );
     }
@@ -957,7 +972,7 @@ mod render_filter_tests {
             ..Settings::default()
         };
         assert_eq!(
-            render_filter(&settings, None, 120.0).as_deref(),
+            render_filter(&settings, None, 120.0, false).as_deref(),
             Some("minterpolate=fps=600:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,tmix=frames=5:weights='1 4 6 4 1',fps=fps=60:round=near")
         );
     }
@@ -969,7 +984,7 @@ mod render_filter_tests {
             ..Settings::default()
         };
         assert_eq!(
-            render_filter(&settings, None, 60.0).as_deref(),
+            render_filter(&settings, None, 60.0, false).as_deref(),
             Some("eq=gamma=1.18:gamma_weight=0.82")
         );
     }
