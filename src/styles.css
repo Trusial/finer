@@ -2099,3 +2099,80 @@ body { background: var(--page); }
   .pill-indicator, .switch > span { transition: none !important; }
 }
 :root[data-theme="dark"] .method-stack .pill-indicator { background: #636366; }
+
+/* Glass layer: translucent iOS materials over a soft ambient backdrop. Keep last. */
+:root {
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-strong: rgba(255, 255, 255, 0.72);
+  --glass-edge: rgba(255, 255, 255, 0.7);
+  --glass-line: rgba(17, 24, 39, 0.08);
+  --glass-blur: blur(28px) saturate(1.8);
+  --glass-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 8px 32px rgba(31, 38, 135, 0.08);
+}
+:root[data-theme="dark"] {
+  --glass: rgba(28, 28, 32, 0.5);
+  --glass-strong: rgba(36, 36, 42, 0.68);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --glass-line: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+body {
+  background:
+    radial-gradient(60% 50% at 12% 0%, color-mix(in srgb, var(--primary) 26%, transparent) 0, transparent 70%),
+    radial-gradient(50% 45% at 100% 100%, rgba(56, 189, 248, .22) 0, transparent 70%),
+    radial-gradient(40% 40% at 70% 20%, rgba(236, 72, 153, .12) 0, transparent 70%),
+    var(--page);
+  background-attachment: fixed;
+}
+.app { background: transparent; }
+.titlebar,
+.footer {
+  background: var(--glass);
+  border-color: var(--glass-line);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.studio-layout { padding: 12px; gap: 12px; }
+.tool-rail,
+.inspector,
+.workspace {
+  border: 1px solid var(--glass-edge);
+  border-radius: 22px;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.workspace { background: color-mix(in srgb, var(--glass) 70%, transparent); }
+.inspector-section,
+.quality-recipe,
+.queue-list,
+.queue-empty,
+.drop-zone {
+  background: var(--glass-strong);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+.drop-zone { border: 2px dashed color-mix(in srgb, var(--primary) 35%, var(--glass-edge)); }
+.queue-row { background: transparent; }
+.queue-row + .queue-row { border-color: var(--glass-line); }
+.recipe-stats div + div { border-color: var(--glass-line); }
+.method-stack { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.rail-nav .pill-indicator { box-shadow: 0 1px 0 rgba(255,255,255,.35) inset, 0 8px 20px color-mix(in srgb, var(--primary) 35%, transparent); }
+.button:not(.button-primary):not(.button-icon):not(.button-ghost) {
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--glass-blur);
+}
+.button-primary { box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 6px 18px color-mix(in srgb, var(--primary) 30%, transparent); }
+.modal,
+.toast,
+.tooltip,
+.bitrate-menu {
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.modal-overlay { background: rgba(0, 0, 0, .25); }
+@media (max-width: 860px) { .studio-layout { padding: 8px; gap: 8px; } }
