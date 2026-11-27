@@ -381,6 +381,7 @@ fn frame_gap(source_fps: f64, target_fps: u32) -> u32 {
 }
 
 /// f0e/blur `gaussian_sym`: mean 0, std dev 1, sampled evenly over [-2, 2].
+#[allow(dead_code)]
 fn gaussian_sym_weights(frames: u32) -> String {
     if frames <= 1 {
         return "1".to_owned();
@@ -435,18 +436,27 @@ fn temporal_blend(settings: &Settings, source_fps: f64) -> Option<String> {
     if !blur && gap <= 1 {
         return Some(format!("fps=fps={target}:round=near"));
     }
-    let frames = if blur {
-        // Samples act as f0e's blur amount: more samples, longer shutter,
-        // capped at two output frames so motion stays readable.
-        odd(u32::from(settings.blur_samples).min(2 * gap + 1).max(3))
-    } else {
-        gap.max(2)
-    };
-    let weights = if blur {
-        gaussian_sym_weights(frames)
-    } else {
-        vec!["1"; frames as usize].join(" ")
-    };
+    if blur {
+        // Motion Blur, modelled on f0e/blur's strongest preset and improved:
+        // * blur amount: 5 samples = one output frame of shutter (f0e amount 1),
+        //   up to two frames; the window is always odd and centred;
+        // * "ascending" weights keep the newest frame crisp and let the trail
+        //   fade behind it;
+        // * frames are mixed in 32-bit float with a gamma of 2, so bright
+        //   streaks stay bright instead of turning grey, without the banding
+        //   or crushed blacks that an 8/16-bit gamma round trip would cause.
+        let amount = f64::from(settings.blur_samples) / 5.0;
+        let frames = odd(((f64::from(gap) * amount).round() as u32).clamp(3, 2 * gap + 1));
+        let weights = (1..=frames).map(|w| w.to_string()).collect::<Vec<_>>().join(" ");
+        let (encode, decode) = crate::look::gamma_luts(2.0);
+        let pad = frames / 2;
+        let centre = f64::from(frames - 1) / 2.0 / working_fps;
+        return Some(format!(
+            "{prefix}scale=in_color_matrix=bt709:in_range=tv:out_range=pc,format=gbrpf32le,lut1d=file='{encode}',tpad=stop_mode=clone:stop={pad},tmix=frames={frames}:weights='{weights}',lut1d=file='{decode}',setpts=PTS-{centre:.6}/TB,fps=fps={target}:round=near:start_time=0,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p"
+        ));
+    }
+    let frames = gap.max(2);
+    let weights = vec!["1"; frames as usize].join(" ");
     let pad = frames / 2;
     let centre = f64::from(frames - 1) / 2.0 / working_fps;
     Some(format!(
@@ -1072,10 +1082,13 @@ mod render_filter_tests {
             blur_samples: 5,
             ..Settings::default()
         };
-        assert_eq!(
-            render_filter(&settings, None, 120.0, false).as_deref(),
-            Some("format=yuv420p16le,tpad=stop_mode=clone:stop=2,tmix=frames=5:weights='135 607 1000 607 135',setpts=PTS-0.016667/TB,fps=fps=60:round=near:start_time=0,scale=sws_dither=none,format=yuv420p")
-        );
+        let filter = render_filter(&settings, None, 240.0, false).unwrap();
+        assert!(filter.contains("format=gbrpf32le"));
+        assert!(filter.contains("tmix=frames=5:weights='1 2 3 4 5'"));
+        assert!(filter.contains("finer-gamma-200-encode.cube"));
+        assert!(filter.contains("finer-gamma-200-decode.cube"));
+        assert!(filter.contains("setpts=PTS-0.008333/TB"));
+        assert!(filter.ends_with("format=yuv420p"));
     }
 
     #[test]

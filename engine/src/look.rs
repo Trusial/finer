@@ -70,6 +70,28 @@ fn lut_path() -> PathBuf {
     path
 }
 
+/// Writes power-curve LUTs (x^g and x^(1/g)) for gamma-weighted blending and
+/// returns their escaped paths. 4096 entries keep float input accurate.
+pub(crate) fn gamma_luts(gamma: f64) -> (String, String) {
+    let write = |name: &str, power: f64| {
+        let mut text = String::from("LUT_1D_SIZE 4096\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 1 1 1\n");
+        for i in 0..4096 {
+            let v = (f64::from(i) / 4095.0).powf(power);
+            text.push_str(&format!("{v:.7} {v:.7} {v:.7}\n"));
+        }
+        let path = std::env::temp_dir().join(name);
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(text.as_str()) {
+            let _ = std::fs::write(&path, &text);
+        }
+        escape(&path)
+    };
+    let tag = (gamma * 100.0).round() as u32;
+    (
+        write(&format!("finer-gamma-{tag}-encode.cube"), gamma),
+        write(&format!("finer-gamma-{tag}-decode.cube"), 1.0 / gamma),
+    )
+}
+
 /// FFmpeg filter-graph escaping for a path inside single quotes.
 fn escape(path: &std::path::Path) -> String {
     path.display()
