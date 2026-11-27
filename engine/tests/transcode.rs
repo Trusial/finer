@@ -347,12 +347,12 @@ async fn inputs_progress_collision_and_errors() {
     }
 
     let input = folder.join("montaÅ¼ & test.mp4");
-    let old_file = folder.join("montaÅ¼ & test_finer.mp4");
+    let old_file = folder.join("montaÅ¼ & test - Refined.mp4");
     let old_length = fs::metadata(&old_file).unwrap().len();
     let output = convert(job(&input, folder, &b), CancellationToken::new(), |_| {})
         .await
         .unwrap();
-    assert_eq!(output.name, "montaÅ¼ & test_finer_2.mp4");
+    assert_eq!(output.name, "montaÅ¼ & test - Refined (2).mp4");
     assert_eq!(fs::metadata(&old_file).unwrap().len(), old_length);
     assert_eq!(fs::read_dir(folder.join("logs")).unwrap().count(), 5);
     no_staging(folder);
@@ -472,13 +472,13 @@ fn settings_round_trip_and_invalid_json() {
 fn plans_queue_filenames_without_collisions() {
     let folder = tempfile::tempdir().unwrap();
     let base = folder.path();
-    fs::write(base.join("clip_finer.mp4"), "existing").unwrap();
+    fs::write(base.join("clip - Refined.mp4"), "existing").unwrap();
     let paths = [base.join("clip.mov"), base.join("clip.mkv")];
     assert_eq!(
         plan_outputs(&paths, &Settings::default()),
         vec![
-            Some(base.join("clip_finer_2.mp4")),
-            Some(base.join("clip_finer_3.mp4"))
+            Some(base.join("clip - Refined (2).mp4")),
+            Some(base.join("clip - Refined (3).mp4"))
         ],
     );
 }
@@ -600,7 +600,7 @@ async fn variable_timestamps_and_cancellation() {
         .await
         .unwrap_err();
         assert_eq!(error.code, "cancelled");
-        assert!(!folder.join("variable_finer_2.mp4").exists());
+        assert!(!folder.join("variable - Refined (2).mp4").exists());
         no_staging(folder);
     }
 }

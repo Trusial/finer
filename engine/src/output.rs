@@ -113,9 +113,9 @@ fn output_path(input: &Path, directory: &Path, attempt: u32) -> PathBuf {
         .file_stem()
         .unwrap_or_else(|| std::ffi::OsStr::new("video"));
     let mut name = OsString::from(stem);
-    name.push("_finer");
+    name.push(" - Refined");
     if attempt > 1 {
-        name.push(format!("_{attempt}"));
+        name.push(format!(" ({attempt})"));
     }
     name.push(".mp4");
     directory.join(name)
