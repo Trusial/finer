@@ -131,7 +131,7 @@ async fn encode(
     } else {
         format!("1:{}", job.settings.target_fps)
     };
-    let shadow_lifted = job.settings.shadow_lift && job.settings.render_mode != RenderMode::Quality;
+    let shadow_lifted = job.settings.render_mode == RenderMode::Quality || job.settings.shadow_lift;
     // OBS and similar recorders tag Rec.709 primaries with the sRGB transfer curve.
     // Premiere converts that to a true Rec.709 curve on export; match it so the
     // result looks the same in players and on TikTok.
@@ -351,7 +351,8 @@ fn render_filter(
     // Bright Mode reproduces Premiere: OBS's sRGB-tagged values are taken as
     // Rec.709 unchanged (only the tags are rewritten), which keeps shadows such
     // as obsidian bright. Without it, the sRGB curve is converted exactly.
-    let bright = settings.shadow_lift && settings.render_mode != RenderMode::Quality;
+    // Finer (Quality) always keeps the OBS look; Blender follows the Bright Mode switch.
+    let bright = settings.render_mode == RenderMode::Quality || settings.shadow_lift;
     if srgb_source {
         filters.push(if bright {
             "setparams=color_trc=bt709:color_primaries=bt709:colorspace=bt709".to_owned()
@@ -1094,5 +1095,9 @@ mod render_filter_tests {
         );
         let quality = Settings { shadow_lift: true, ..Settings::default() };
         assert_eq!(render_filter(&quality, None, 60.0, false), None);
+        assert_eq!(
+            render_filter(&Settings::default(), None, 60.0, true).as_deref(),
+            Some("setparams=color_trc=bt709:color_primaries=bt709:colorspace=bt709")
+        );
     }
 }
