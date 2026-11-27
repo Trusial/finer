@@ -29,7 +29,7 @@ export const defaults: Settings = {
   useSourceDirectory: true,
   threads: 16,
   gpuDecoding: true,
-  gpuEncoding: false,
+  gpuEncoding: true,
   videoBitrateKbps: bitrateStepKbps * bitrateSteps,
   openFolderAfterConversion: false,
   keepLogs: false,

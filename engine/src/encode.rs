@@ -492,13 +492,14 @@ enum Pass {
     Analysis,
     SoftwareOutput,
     MasterOutput,
+    GpuMaster(GpuEncoder),
     GpuOutput(GpuEncoder),
 }
 
 impl Pass {
     fn name(self) -> &'static str {
         match self {
-            Self::GpuOutput(encoder) => encoder.name(),
+            Self::GpuOutput(encoder) | Self::GpuMaster(encoder) => encoder.name(),
             _ => "libx264",
         }
     }
@@ -557,6 +558,28 @@ impl Encoder<'_> {
         if self.job.settings.render_mode != RenderMode::Quality {
             if let Some(slot) = checkpoint.as_deref_mut() {
                 *slot = None;
+            }
+            // Blender renders one visually lossless master, on the GPU when chosen
+            // and available, otherwise (or after a GPU failure) with x264.
+            if self.job.settings.gpu_encoding {
+                for &encoder in &acceleration.encoders {
+                    for decode in acceleration.decode_options(Some(encoder)) {
+                        match self.gpu_master(encoder, decode, target, cancel, log).await {
+                            Ok(output) => return Ok(output),
+                            Err(error) if can_retry(&error) => log.line(format!(
+                                "{} with {} decoding: {} {}",
+                                encoder.name(),
+                                decode.unwrap_or("CPU"),
+                                error.message,
+                                error.detail
+                            )),
+                            Err(error) => return Err(error),
+                        }
+                    }
+                }
+                if !acceleration.encoders.is_empty() {
+                    log.line("Using the CPU encoder.".into());
+                }
             }
             for decode in acceleration.decode_options(None) {
                 match self.master_export(decode, target, cancel, log).await {
@@ -670,6 +693,27 @@ impl Encoder<'_> {
             media,
             frames,
             encoder: "libx264",
+            decoder,
+        })
+    }
+
+    async fn gpu_master(
+        &self,
+        encoder: GpuEncoder,
+        decoder: Option<&'static str>,
+        target: &ExportTarget<'_>,
+        cancel: &CancellationToken,
+        log: &mut Log<'_>,
+    ) -> Result<Encoded, Error> {
+        let frames = self
+            .run(Pass::GpuMaster(encoder), decoder, target.path, target.path, cancel, log)
+            .await?
+            .frame;
+        let media = self.verify(target, frames, true, cancel).await?;
+        Ok(Encoded {
+            media,
+            frames,
+            encoder: encoder.name(),
             decoder,
         })
     }
@@ -840,7 +884,7 @@ impl Encoder<'_> {
             Pass::Analysis => (1, 2),
             Pass::SoftwareOutput => (2, 2),
             Pass::MasterOutput => (1, 1),
-            Pass::GpuOutput(_) => (1, 1),
+            Pass::GpuOutput(_) | Pass::GpuMaster(_) => (1, 1),
         };
         let encoder = pass.name();
         let mut command = self.command(pass, decoder, passlog, output);
@@ -971,9 +1015,10 @@ impl Encoder<'_> {
                 "-threads:v", &settings.threads.to_string(), "-pass", number, "-passlogfile",
             ]).arg(passlog);
             }
+            Pass::GpuMaster(encoder) => encoder.configure_master(&mut command, self.gpu_level),
             Pass::MasterOutput => {
                 command.args([
-                    "-c:v", "libx264", "-preset", "slow", "-crf", "3",
+                    "-c:v", "libx264", "-preset", "slow", "-crf", "1",
                     "-profile:v", "high", "-level:v", self.level, "-pix_fmt", "yuv420p",
                     "-keyint_min", "25", "-sc_threshold", "40", "-refs", "5", "-bf", "3",
                     "-x264-params", "b-adapt=2:b-pyramid=2:rc-lookahead=50:mbtree=1:aq-mode=3:aq-strength=0.8:psy-rd=1.0,0.0",

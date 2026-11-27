@@ -55,7 +55,7 @@ impl Default for Settings {
             use_source_directory: true,
             threads: 16,
             gpu_decoding: true,
-            gpu_encoding: false,
+            gpu_encoding: true,
             video_bitrate_kbps: MAX_VIDEO_BITRATE_KBPS,
             open_folder_after_conversion: false,
             keep_logs: false,

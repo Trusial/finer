@@ -238,7 +238,7 @@ async fn blender_modes_render_single_pass_master_quality() {
             .iter()
             .all(|&(pass, passes)| pass == 1 && passes == 1));
         let command = commands.into_inner().unwrap().join("\n");
-        assert!(command.contains("\"-crf\" \"3\""));
+        assert!(command.contains("\"-crf\" \"1\""));
         assert!(command.contains("eq=gamma=1.18:gamma_weight=0.82"));
         assert!(!command.contains("\"-pass\""));
     }
@@ -423,7 +423,7 @@ fn settings_round_trip_and_invalid_json() {
     assert_eq!(defaults.threads, 16);
     assert_eq!(defaults.video_bitrate_kbps, 16_617 * 7);
     assert!(defaults.use_source_directory);
-    assert!(!defaults.gpu_encoding && defaults.gpu_decoding);
+    assert!(defaults.gpu_encoding && defaults.gpu_decoding);
     let custom = Settings {
         theme: finer_engine::Theme::Dark,
         output_directory: Some(folder.path().to_owned()),

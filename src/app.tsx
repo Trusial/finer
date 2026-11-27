@@ -459,9 +459,15 @@ export function App() {
               <div><span>Video</span><strong>H.264 High</strong></div>
               <div>
                 <span>{blenderActive ? "Quality" : "Bitrate"}</span>
-                <strong>{blenderActive ? "CRF 3 master" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} Mbps`}</strong>
+                <strong>{blenderActive ? (settings.gpuEncoding ? "NVENC QP 8" : "x264 CRF 1") : `${(settings.videoBitrateKbps / 1000).toFixed(1)} Mbps`}</strong>
               </div>
-              <div><span>Acceleration</span><strong>{blenderActive ? "CPU HQ" : settings.gpuEncoding ? "GPU" : "CPU"}</strong></div>
+              <div className="stat-toggle">
+                <span>Render with</span>
+                <PillGroup className="segmented accel-switch" axis="x" label="Render with" activeKey={settings.gpuEncoding ? "gpu" : "cpu"}>
+                  <button data-key="cpu" className={!settings.gpuEncoding ? "segment is-active" : "segment"} aria-pressed={!settings.gpuEncoding} disabled={queue.running} onClick={() => void updateRenderSettings({ gpuEncoding: false })}>CPU</button>
+                  <button data-key="gpu" className={settings.gpuEncoding ? "segment is-active" : "segment"} aria-pressed={settings.gpuEncoding} disabled={queue.running} onClick={() => void updateRenderSettings({ gpuEncoding: true })}>GPU</button>
+                </PillGroup>
+              </div>
               {blenderActive && (
                 <div className="stat-toggle">
                   <span>Bright Mode<small>Brighter obsidian and dark blocks</small></span>

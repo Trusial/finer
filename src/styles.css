@@ -548,3 +548,6 @@ svg { flex: none; width: 16px; height: 16px; stroke-width: 1.75; }
 
 .ring, .ring * { outline: none !important; border: 0 !important; box-shadow: none !important; }
 .ring svg { overflow: visible; }
+
+.accel-switch { width: 128px; height: 30px; }
+.accel-switch .segment { height: 26px; font-size: 12px; }

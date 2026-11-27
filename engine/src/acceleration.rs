@@ -19,6 +19,26 @@ impl GpuEncoder {
         }
     }
 
+    /// Near-lossless settings for Blender masters (quality over file size).
+    pub(crate) fn configure_master(self, command: &mut Command, level: &str) {
+        command.args(["-c:v", self.name()]);
+        match self {
+            Self::Nvenc => {
+                command.args([
+                    "-profile:v", "high", "-level:v", level, "-pix_fmt", "yuv420p",
+                    "-preset", "p7", "-tune", "hq", "-rc", "constqp", "-qp", "8",
+                    "-bf", "3", "-b_ref_mode", "middle", "-spatial-aq", "1", "-temporal-aq", "1",
+                ]);
+            }
+            Self::MediaFoundation => {
+                command.args([
+                    "-hw_encoding", "1", "-profile:v", "100", "-pix_fmt", "nv12",
+                    "-rate_control", "quality", "-quality", "95", "-bf", "2",
+                ]);
+            }
+        }
+    }
+
     pub(crate) fn configure(self, command: &mut Command, level: &str, cuda_frames: bool) {
         command.args(["-c:v", self.name()]);
         match self {
