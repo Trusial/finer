@@ -238,7 +238,7 @@ async fn blender_modes_render_single_pass_master_quality() {
             .iter()
             .all(|&(pass, passes)| pass == 1 && passes == 1));
         let command = commands.into_inner().unwrap().join("\n");
-        assert!(command.contains("\"-crf\" \"8\""));
+        assert!(command.contains("\"-crf\" \"3\""));
         assert!(command.contains("eq=gamma=1.18:gamma_weight=0.82"));
         assert!(!command.contains("\"-pass\""));
     }

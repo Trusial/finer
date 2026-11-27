@@ -356,56 +356,13 @@ fn render_filter(
     }
     match settings.render_mode {
         RenderMode::Quality => {}
-        RenderMode::FrameBlend => {
-            let target = f64::from(settings.target_fps);
-            if source_fps > target * 1.005 {
-                let frames = (source_fps / target).round().clamp(2.0, 16.0) as u32;
-                let weights = std::iter::repeat_n("1", frames as usize)
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                filters.push(format!(
-                    "tmix=frames={frames}:weights='{weights}',fps=fps={}:round=near",
-                    settings.target_fps
-                ));
-            } else if source_fps < target * 0.995 {
-                filters.push(format!(
-                    "minterpolate=fps={}:mi_mode=blend:scd=fdiff:scd_threshold=10",
-                    settings.target_fps
-                ));
-            } else {
-                filters.push(format!("fps=fps={}:round=near", settings.target_fps));
+        RenderMode::FrameBlend | RenderMode::MotionBlur => {
+            if let Some(blend) = temporal_blend(settings, source_fps) {
+                filters.push(blend);
             }
         }
-        RenderMode::MotionBlur => {
-            // Blur is a weighted temporal window. High-frame-rate recordings already
-            // contain the sub-frames, so they are blended directly (fast and artefact
-            // free). Only low-frame-rate sources are motion-interpolated first, and
-            // never above 480 fps, because minterpolate's motion search is
-            // single-threaded and would otherwise stall at 0% on long 1080p clips.
-            let target = f64::from(settings.target_fps);
-            let samples = u32::from(settings.blur_samples);
-            let ratio = source_fps / target;
-            let odd = |n: u32| if n % 2 == 0 { n + 1 } else { n };
-            let filter = if ratio >= 2.0 {
-                let frames = odd(samples.min(2 * ratio.round() as u32 + 1).max(3));
-                format!(
-                    "tmix=frames={frames}:weights='{}',fps=fps={}:round=near",
-                    binomial_weights(frames),
-                    settings.target_fps
-                )
-            } else {
-                let factor = samples.clamp(3, 8);
-                let working_fps = (target * f64::from(factor)).min(480.0).round() as u32;
-                let frames = odd((working_fps as f64 / target).round() as u32);
-                format!(
-                    "minterpolate=fps={working_fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,tmix=frames={frames}:weights='{}',fps=fps={}:round=near",
-                    binomial_weights(frames),
-                    settings.target_fps
-                )
-            };
-            filters.push(filter);
-        }
-    }    if settings.shadow_lift && settings.render_mode != RenderMode::Quality {
+    }
+    if settings.shadow_lift && settings.render_mode != RenderMode::Quality {
         // Lift dark and mid-tone luminance while protecting highlights. This is
         // intentionally a creative Minecraft look, not automatic color management.
         filters.push("eq=gamma=1.18:gamma_weight=0.82".to_owned());
@@ -413,6 +370,85 @@ fn render_filter(
     (!filters.is_empty()).then(|| filters.join(","))
 }
 
+/// Number of source frames covered by one output frame (f0e's `frame_gap`).
+fn frame_gap(source_fps: f64, target_fps: u32) -> u32 {
+    (source_fps / f64::from(target_fps)).floor().max(1.0) as u32
+}
+
+/// f0e/blur `gaussian_sym`: mean 0, std dev 1, sampled evenly over [-2, 2].
+fn gaussian_sym_weights(frames: u32) -> String {
+    if frames <= 1 {
+        return "1".to_owned();
+    }
+    let step = 4.0 / f64::from(frames - 1);
+    (0..frames)
+        .map(|i| {
+            let x = -2.0 + step * f64::from(i);
+            // Integer weights keep tmix exact; 1000 gives ample precision.
+            ((-x * x / 2.0).exp() * 1000.0).round().max(1.0).to_string()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Temporal blending for Frame Blend (Premiere/f0e "equal") and Motion Blur
+/// (f0e "gaussian_sym").
+///
+/// Improvements over both references:
+/// * Frames are mixed at 16-bit precision and dithered back to 8-bit once,
+///   so the blend adds no banding on top of the source.
+/// * The window is centred on the output frame, keeping picture and audio in
+///   sync (tmix itself only looks backwards).
+/// * Each output frame is exactly one blended frame, chosen on the source's own
+///   timeline, never a re-blend or a dropped neighbour.
+/// * High-frame-rate recordings use their real frames instead of synthetic
+///   interpolated ones, so no interpolation artefacts can appear.
+fn temporal_blend(settings: &Settings, source_fps: f64) -> Option<String> {
+    let target = settings.target_fps;
+    let target_f = f64::from(target);
+    let odd = |n: u32| if n % 2 == 0 { n + 1 } else { n };
+    let blur = settings.render_mode == RenderMode::MotionBlur;
+
+    // Sources slower than the target need synthetic in-between frames first.
+    let (prefix, working_fps) = if source_fps < target_f * if blur { 2.0 } else { 0.995 } {
+        if !blur {
+            return Some(format!(
+                "minterpolate=fps={target}:mi_mode=blend:scd=fdiff:scd_threshold=10,fps=fps={target}:round=near"
+            ));
+        }
+        // Motion search is single-threaded, so cap it to stay usable.
+        let working = (target * u32::from(settings.blur_samples).clamp(3, 8)).min(480);
+        (
+            format!("minterpolate=fps={working}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,"),
+            f64::from(working),
+        )
+    } else {
+        (String::new(), source_fps)
+    };
+
+    let gap = frame_gap(working_fps, target);
+    if !blur && gap <= 1 {
+        return Some(format!("fps=fps={target}:round=near"));
+    }
+    let frames = if blur {
+        // Samples act as f0e's blur amount: more samples, longer shutter,
+        // capped at two output frames so motion stays readable.
+        odd(u32::from(settings.blur_samples).min(2 * gap + 1).max(3))
+    } else {
+        gap.max(2)
+    };
+    let weights = if blur {
+        gaussian_sym_weights(frames)
+    } else {
+        vec!["1"; frames as usize].join(" ")
+    };
+    let pad = frames / 2;
+    let centre = f64::from(frames - 1) / 2.0 / working_fps;
+    Some(format!(
+        "{prefix}format=yuv420p16le,tpad=stop_mode=clone:stop={pad},tmix=frames={frames}:weights='{weights}',setpts=PTS-{centre:.6}/TB,fps=fps={target}:round=near:start_time=0,scale=sws_dither=none,format=yuv420p"
+    ))
+}
+#[allow(dead_code)]
 fn binomial_weights(samples: u32) -> String {
     let row = samples.saturating_sub(1);
     let mut value = 1_u64;
@@ -937,7 +973,7 @@ impl Encoder<'_> {
             }
             Pass::MasterOutput => {
                 command.args([
-                    "-c:v", "libx264", "-preset", "slow", "-crf", "8",
+                    "-c:v", "libx264", "-preset", "slow", "-crf", "3",
                     "-profile:v", "high", "-level:v", self.level, "-pix_fmt", "yuv420p",
                     "-keyint_min", "25", "-sc_threshold", "40", "-refs", "5", "-bf", "3",
                     "-x264-params", "b-adapt=2:b-pyramid=2:rc-lookahead=50:mbtree=1:aq-mode=3:aq-strength=0.8:psy-rd=1.0,0.0",
@@ -974,7 +1010,7 @@ mod render_filter_tests {
         };
         assert_eq!(
             render_filter(&settings, None, 120.0, false).as_deref(),
-            Some("tmix=frames=2:weights='1 1',fps=fps=60:round=near")
+            Some("format=yuv420p16le,tpad=stop_mode=clone:stop=1,tmix=frames=2:weights='1 1',setpts=PTS-0.004167/TB,fps=fps=60:round=near:start_time=0,scale=sws_dither=none,format=yuv420p")
         );
     }
 
@@ -988,7 +1024,7 @@ mod render_filter_tests {
         };
         assert_eq!(
             render_filter(&settings, None, 120.0, false).as_deref(),
-            Some("tmix=frames=5:weights='1 4 6 4 1',fps=fps=60:round=near")
+            Some("format=yuv420p16le,tpad=stop_mode=clone:stop=2,tmix=frames=5:weights='135 607 1000 607 135',setpts=PTS-0.016667/TB,fps=fps=60:round=near:start_time=0,scale=sws_dither=none,format=yuv420p")
         );
     }
 

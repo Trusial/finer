@@ -459,7 +459,7 @@ export function App() {
               <div><span>Video</span><strong>H.264 High</strong></div>
               <div>
                 <span>{blenderActive ? "Quality" : "Bitrate"}</span>
-                <strong>{blenderActive ? "CRF 8 master" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} Mbps`}</strong>
+                <strong>{blenderActive ? "CRF 3 master" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} Mbps`}</strong>
               </div>
               <div><span>Acceleration</span><strong>{blenderActive ? "CPU HQ" : settings.gpuEncoding ? "GPU" : "CPU"}</strong></div>
               {blenderActive && (
