@@ -278,10 +278,43 @@ export function App() {
           <div className="brand" data-tauri-drag-region>
             <img className="brand-mark" src={finerIcon} alt="" />
             <span>Finer</span>
-            <span className="local-badge">LOCAL</span>
           </div>
+          <PillGroup
+            className="mode-switch"
+            axis="x"
+            label="Tool"
+            activeKey={blenderActive ? "blender" : "finer"}
+            onPick={(key) => void updateRenderSettings({ renderMode: key === "blender" ? (blenderActive ? settings.renderMode : "frameBlend") : "quality" })}
+          >
+            <button
+              data-key="finer"
+              className={!blenderActive ? "segment is-active" : "segment"}
+              aria-pressed={!blenderActive}
+              disabled={queue.running}
+              onClick={() => void updateRenderSettings({ renderMode: "quality" })}
+            >
+              Finer
+            </button>
+            <button
+              data-key="blender"
+              className={blenderActive ? "segment is-active" : "segment"}
+              aria-pressed={blenderActive}
+              disabled={queue.running}
+              onClick={() => void updateRenderSettings({ renderMode: blenderActive ? settings.renderMode : "frameBlend" })}
+            >
+              Blender
+            </button>
+          </PillGroup>
           <div className="window-actions">
-            <div className="caption-controls">
+            <button
+              ref={settingsButton}
+              className="caption-button settings-gear"
+              aria-label="Settings"
+              disabled={queue.running || picking}
+              onClick={() => setSettingsOpen("general")}
+            >
+              <Settings2 />
+            </button>            <div className="caption-controls">
               <button
                 className="caption-button"
                 aria-label="Minimize"
@@ -308,39 +341,6 @@ export function App() {
         </header>
 
         <div className="studio-layout">
-          <aside className="tool-rail">
-            <span className="rail-label">Tools</span>
-            <PillGroup className="rail-nav" label="Tools" activeKey={blenderActive ? "blender" : "finer"}>
-              <button
-                className={!blenderActive ? "rail-tool is-active" : "rail-tool"}
-                aria-pressed={!blenderActive}
-                disabled={queue.running}
-                onClick={() => void updateRenderSettings({ renderMode: "quality" })}
-              >
-                <Gauge />
-                <span><strong>Finer</strong><small>Quality</small></span>
-              </button>
-              <button
-                className={blenderActive ? "rail-tool is-active" : "rail-tool"}
-                aria-pressed={blenderActive}
-                disabled={queue.running}
-                onClick={() => void updateRenderSettings({ renderMode: blenderActive ? settings.renderMode : "frameBlend" })}
-              >
-                <Layers3 />
-                <span><strong>Blender</strong><small>Motion</small></span>
-              </button>
-            </PillGroup>
-            <div className="rail-spacer" />
-            <button
-              ref={settingsButton}
-              className="rail-tool rail-settings"
-              disabled={queue.running || picking}
-              onClick={() => setSettingsOpen("general")}
-            >
-              <Settings2 />
-              <span><strong>Settings</strong><small>System</small></span>
-            </button>
-          </aside>
 
           <main className={`${queue.jobs.length ? "workspace" : "workspace is-empty"} ${blenderActive ? "is-blender" : ""}`}>
           <div className="content">
@@ -430,8 +430,9 @@ export function App() {
             </div>
             {blenderActive ? (
               <section className="inspector-section mode-card swap-in">
-                <PillGroup className="segmented" axis="x" label="Method" activeKey={settings.renderMode}>
+                <PillGroup className="segmented" axis="x" label="Method" activeKey={settings.renderMode} onPick={(key) => void updateRenderSettings({ renderMode: key as Settings["renderMode"] })}>
                   <button
+                    data-key="frameBlend"
                     className={settings.renderMode === "frameBlend" ? "segment is-active" : "segment"}
                     aria-pressed={settings.renderMode === "frameBlend"}
                     onClick={() => void updateRenderSettings({ renderMode: "frameBlend" })}
@@ -439,6 +440,7 @@ export function App() {
                     <Layers3 />Frame Blend
                   </button>
                   <button
+                    data-key="motionBlur"
                     className={settings.renderMode === "motionBlur" ? "segment is-active" : "segment"}
                     aria-pressed={settings.renderMode === "motionBlur"}
                     onClick={() => void updateRenderSettings({ renderMode: "motionBlur" })}
