@@ -1,4 +1,3 @@
-import type React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import * as Switch from "@radix-ui/react-switch";
@@ -32,7 +31,7 @@ import { QueueRow } from "./queue-row";
 import { ResolutionDialog } from "./resolution-dialog";
 import { SettingsDialog } from "./settings-dialog";
 import { Button, Hint } from "./ui";
-import { CompareDialog, DoneCard, ExportProgress, RowMenu, type RowAction } from "./studio-panels";
+import { CompareDialog, DoneCard, ExportProgress, IosSelect, PillGroup, RowMenu, type RowAction } from "./studio-panels";
 import finerIcon from "./finer-icon.png";
 
 export function App() {
@@ -311,8 +310,7 @@ export function App() {
         <div className="studio-layout">
           <aside className="tool-rail">
             <span className="rail-label">Tools</span>
-            <nav aria-label="Tools" className="rail-nav" style={{ "--i": blenderActive ? 1 : 0 } as React.CSSProperties}>
-              <span className="pill-indicator" aria-hidden="true" />
+            <PillGroup className="rail-nav" label="Tools" activeKey={blenderActive ? "blender" : "finer"}>
               <button
                 className={!blenderActive ? "rail-tool is-active" : "rail-tool"}
                 aria-pressed={!blenderActive}
@@ -331,7 +329,7 @@ export function App() {
                 <Layers3 />
                 <span><strong>Blender</strong><small>Motion</small></span>
               </button>
-            </nav>
+            </PillGroup>
             <div className="rail-spacer" />
             <button
               ref={settingsButton}
@@ -369,7 +367,7 @@ export function App() {
                     <Upload />
                   </span>
                   <strong>{dragging ? "Release to add your video" : "Drop your video here"}</strong>
-                  <span className="drop-hint">MP4, MOV, MKV or WebM Â· Ctrl+O to browse</span>
+                  <span className="drop-hint">MP4, MOV, MKV or WebM · Ctrl+O to browse</span>
                 </button>
               </>
             ) : (
@@ -431,46 +429,44 @@ export function App() {
               <strong className="mode-chip" key={blenderActive ? "b" : "f"}>{blenderActive ? "Blender" : "Finer"}</strong>
             </div>
             {blenderActive ? (
-              <>
-                <section className="inspector-section swap-in">
-                  <span className="inspector-label">Method</span>
-                  <div className="method-stack" style={{ "--i": settings.renderMode === "motionBlur" ? 1 : 0 } as React.CSSProperties}>
-                    <span className="pill-indicator" aria-hidden="true" />
-                    <button
-                      className={settings.renderMode === "frameBlend" ? "method-button is-active" : "method-button"}
-                      aria-pressed={settings.renderMode === "frameBlend"}
-                      onClick={() => void updateRenderSettings({ renderMode: "frameBlend" })}
-                    >
-                      <Layers3 /><span><strong>Frame Blend</strong><small>Adjacent-frame mix</small></span>
-                    </button>
-                    <button
-                      className={settings.renderMode === "motionBlur" ? "method-button is-active" : "method-button"}
-                      aria-pressed={settings.renderMode === "motionBlur"}
-                      onClick={() => void updateRenderSettings({ renderMode: "motionBlur" })}
-                    >
-                      <WandSparkles /><span><strong>Motion Blur</strong><small>Interpolated accumulation</small></span>
-                    </button>
-                  </div>
-                </section>
-                <section className={`inspector-section inspector-fields ${settings.renderMode === "motionBlur" ? "has-two" : ""}`}>
-                  <label>
-                    <span>Frame rate</span>
-                    <select value={settings.targetFps} onChange={(event) => void updateRenderSettings({ targetFps: Number(event.target.value) })}>
-                      {[24, 30, 50, 60, 90, 120].map((fps) => <option key={fps} value={fps}>{fps} FPS</option>)}
-                    </select>
-                  </label>
-                  {settings.renderMode === "motionBlur" && (
-                    <label>
-                      <span>Samples</span>
-                      <select value={settings.blurSamples} onChange={(event) => void updateRenderSettings({ blurSamples: Number(event.target.value) })}>
-                        {[3, 5, 7, 9, 11, 13, 15].map((samples) => <option key={samples} value={samples}>{samples}</option>)}
-                      </select>
-                    </label>
-                  )}
-                </section>
-              </>
+              <section className="inspector-section mode-card swap-in">
+                <PillGroup className="segmented" axis="x" label="Method" activeKey={settings.renderMode}>
+                  <button
+                    className={settings.renderMode === "frameBlend" ? "segment is-active" : "segment"}
+                    aria-pressed={settings.renderMode === "frameBlend"}
+                    onClick={() => void updateRenderSettings({ renderMode: "frameBlend" })}
+                  >
+                    <Layers3 />Frame Blend
+                  </button>
+                  <button
+                    className={settings.renderMode === "motionBlur" ? "segment is-active" : "segment"}
+                    aria-pressed={settings.renderMode === "motionBlur"}
+                    onClick={() => void updateRenderSettings({ renderMode: "motionBlur" })}
+                  >
+                    <WandSparkles />Motion Blur
+                  </button>
+                </PillGroup>
+                <p className="mode-hint" key={settings.renderMode}>
+                  {settings.renderMode === "motionBlur" ? "Interpolated shutter blur" : "Adjacent-frame mix"}
+                </p>
+                <div className="field-row">
+                  <IosSelect
+                    label="Frame rate"
+                    value={settings.targetFps}
+                    options={[24, 30, 50, 60, 90, 120].map((fps) => ({ value: fps, label: `${fps} FPS` }))}
+                    onChange={(targetFps) => void updateRenderSettings({ targetFps })}
+                  />
+                  <IosSelect
+                    label="Samples"
+                    value={settings.blurSamples}
+                    disabled={settings.renderMode !== "motionBlur"}
+                    options={[3, 5, 7, 9, 11, 13, 15].map((samples) => ({ value: samples, label: String(samples) }))}
+                    onChange={(blurSamples) => void updateRenderSettings({ blurSamples })}
+                  />
+                </div>
+              </section>
             ) : (
-              <section className="quality-recipe swap-in">
+              <section className="inspector-section mode-card quality-recipe swap-in">
                 <div className="recipe-icon"><Gauge /></div>
                 <strong>TikTok Quality Pass</strong>
                 <p>Two-pass H.264 export with AAC compatibility patch and output validation.</p>
@@ -483,22 +479,20 @@ export function App() {
                 <strong>{blenderActive ? "CRF 8 master" : `${(settings.videoBitrateKbps / 1000).toFixed(1)} Mbps`}</strong>
               </div>
               <div><span>Acceleration</span><strong>{blenderActive ? "CPU HQ" : settings.gpuEncoding ? "GPU" : "CPU"}</strong></div>
-              {blenderActive && <div><span>Bright Mode</span><strong>{settings.shadowLift ? "On" : "Off"}</strong></div>}
+              {blenderActive && (
+                <div className="stat-toggle">
+                  <span>Bright Mode<small>Brighter obsidian and dark blocks</small></span>
+                  <Switch.Root
+                    className="switch"
+                    checked={settings.shadowLift}
+                    onCheckedChange={(checked) => void updateRenderSettings({ shadowLift: checked })}
+                    aria-label="Bright Mode"
+                  >
+                    <Switch.Thumb />
+                  </Switch.Root>
+                </div>
+              )}
             </section>
-            {blenderActive && (<section className="inspector-section color-control swap-in">
-              <div>
-                <strong>Bright Mode</strong>
-                <small>Brighter obsidian and dark blocks</small>
-              </div>
-              <Switch.Root
-                className="switch"
-                checked={settings.shadowLift}
-                onCheckedChange={(checked) => void updateRenderSettings({ shadowLift: checked })}
-                aria-label="Bright Mode"
-              >
-                <Switch.Thumb />
-              </Switch.Root>
-            </section>)}
           </aside>
         </div>
 

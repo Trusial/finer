@@ -1,8 +1,10 @@
+import type React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import * as Select from "@radix-ui/react-select";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Check, Columns2, FileVideo, FolderOpen, MoreHorizontal, Play, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronsUpDown, Columns2, FileVideo, FolderOpen, MoreHorizontal, Play, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { fileLabel, remainingLabel } from "./format";
 import type { Job } from "./queue";
 import { Button } from "./ui";
@@ -204,5 +206,99 @@ export function RowMenu({ label, actions }: { label: string; actions: RowAction[
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>
+  );
+}
+
+/**
+ * Container whose highlight pill stretches toward the newly pressed child and then
+ * settles, like a liquid. The leading edge moves first, the trailing edge follows.
+ */
+export function PillGroup({
+  className,
+  axis = "y",
+  activeKey,
+  label,
+  children,
+}: {
+  className: string;
+  axis?: "x" | "y";
+  activeKey: string;
+  label?: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const previous = useRef<number | null>(null);
+  const [box, setBox] = useState<{ start: number; end: number; forward: boolean } | null>(null);
+
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const measure = () => {
+      const active = root.querySelector<HTMLElement>('[aria-pressed="true"]');
+      if (!active) return;
+      const start = axis === "y" ? active.offsetTop : active.offsetLeft;
+      const size = axis === "y" ? active.offsetHeight : active.offsetWidth;
+      const forward = previous.current === null || start >= previous.current;
+      previous.current = start;
+      setBox({ start, end: start + size, forward });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [activeKey, axis]);
+
+  const style = box
+    ? ({ "--pill-start": `${box.start}px`, "--pill-end": `${box.end}px` } as React.CSSProperties)
+    : undefined;
+  return (
+    <div
+      ref={ref}
+      role="group"
+      aria-label={label}
+      className={`pill-group axis-${axis} ${box?.forward === false ? "is-back" : "is-forward"} ${box ? "is-ready" : ""} ${className}`}
+      style={style}
+    >
+      <span className="pill" aria-hidden="true" />
+      {children}
+    </div>
+  );
+}
+/** Apple-style pop-up button: compact trigger, floating menu with a checkmark. */
+export function IosSelect({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  options: { value: number; label: string }[];
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className={disabled ? "ios-field is-disabled" : "ios-field"}>
+      <span className="ios-field-label">{label}</span>
+      <Select.Root value={String(value)} disabled={disabled} onValueChange={(next) => onChange(Number(next))}>
+        <Select.Trigger className="ios-select" aria-label={label}>
+          <Select.Value />
+          <Select.Icon className="ios-select-icon"><ChevronsUpDown /></Select.Icon>
+        </Select.Trigger>
+        <Select.Portal>
+          <Select.Content className="ios-menu" position="item-aligned">
+            <Select.Viewport className="ios-menu-list">
+              {options.map((option) => (
+                <Select.Item key={option.value} value={String(option.value)} className="ios-menu-item">
+                  <Select.ItemIndicator className="ios-menu-check"><Check /></Select.ItemIndicator>
+                  <Select.ItemText>{option.label}</Select.ItemText>
+                </Select.Item>
+              ))}
+            </Select.Viewport>
+          </Select.Content>
+        </Select.Portal>
+      </Select.Root>
+    </div>
   );
 }
